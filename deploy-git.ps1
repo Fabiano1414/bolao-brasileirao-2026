@@ -38,9 +38,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "4. Conectando ao GitHub..." -ForegroundColor Green
-$remote = git remote get-url origin 2>$null
-if (-not $remote) {
+$remotes = git remote 2>$null
+if ($remotes -notmatch "origin") {
     git remote add origin https://github.com/Fabiano1414/bolao-brasileirao-2026.git
+} else {
+    git remote set-url origin https://github.com/Fabiano1414/bolao-brasileirao-2026.git
 }
 
 Write-Host "5. Enviando para GitHub..." -ForegroundColor Green
