@@ -21,8 +21,9 @@ function getRoundDateLabel(matches: { date: Date }[]): string {
 }
 
 export const AllMatchesModal = ({ isOpen, onClose }: AllMatchesModalProps) => {
-  const { matches, getUpcomingMatchesByRound, getCurrentRound, isLoading, refreshMatches } = useMatchesContext();
-  const { user, getUserPoolsList, savePrediction, getUserPrediction, getMatchResult, getPredictionPoints } = usePoolsContext();
+  const { getUpcomingMatchesByRound, getCurrentRound, isLoading, refreshMatches } = useMatchesContext();
+  const { user } = useAuth();
+  const { getUserPoolsList, savePrediction, getUserPrediction, getMatchResult, getPredictionPoints } = usePoolsContext();
 
   const now = Date.now();
   const matchesByRound = getUpcomingMatchesByRound(now);

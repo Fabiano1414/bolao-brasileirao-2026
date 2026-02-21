@@ -213,7 +213,7 @@ export const NextMatches = ({ onViewAll }: NextMatchesProps) => {
               <div key={match.id} className="min-w-0">
                 <MatchCard
                   match={matchWithResult}
-                  showPrediction={user && hasPool}
+                  showPrediction={!!(user && hasPool)}
                   userPrediction={userPred}
                   pointsEarned={pointsEarned}
                   onPredict={(matchId, homeScore, awayScore) => {

@@ -60,8 +60,6 @@ const round4Config: MatchConfig[] = [
 /** Total de rodadas no Brasileirão Série A */
 export const TOTAL_ROUNDS = 38;
 
-/** ~7 dias entre rodadas (Brasileirão) */
-const MS_PER_ROUND = 7 * 24 * 60 * 60 * 1000;
 
 function buildMatch(config: MatchConfig, roundIndex: number, matchIndex: number): Match {
   const homeTeam = teams.find(t => t.name === config.home) || teams[0];

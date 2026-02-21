@@ -137,6 +137,7 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
   }, [isOpen, initialJoinCode, pool?.id]);
   const { joinPool, leavePool, deletePool, savePrediction, getUserPrediction, getMatchResult, setMatchResult, getPredictionPoints, syncResultsFromApi } = usePoolsContext();
   const getMemberStats = (userId: string) => {
+    if (!pool) return { exactScores: 0, correctResults: 0 };
     let exact = 0, correct = 0;
     (pool.matches ?? []).forEach(m => {
       const pts = getPredictionPoints(pool.id, userId, m.id);

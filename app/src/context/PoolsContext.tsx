@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { Pool, Prediction, User } from '@/types';
 import { mockPools, getPoolById } from '@/data/pools';
 import { useMatchesContext } from '@/context/MatchesContext';

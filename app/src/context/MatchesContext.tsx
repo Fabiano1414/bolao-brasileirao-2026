@@ -4,7 +4,7 @@
  * Cache em localStorage para carregamento imediato e atualização em segundo plano.
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import type { Match } from '@/types';
 import { generateMatches, getCurrentRound as getStaticCurrentRound, TOTAL_ROUNDS } from '@/data/matches';
 import { fetchMatchesFromApi } from '@/lib/matchesApi';

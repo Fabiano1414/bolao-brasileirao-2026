@@ -14,7 +14,6 @@ export const TopRanking = () => {
   if (topScorers.length === 0) return null;
 
   const podiumThree = topScorers.slice(0, 3);
-  const restOfTop = topScorers.slice(3, 10);
 
   return (
     <section ref={ref} className="py-24 relative overflow-hidden" id="top-ranking">

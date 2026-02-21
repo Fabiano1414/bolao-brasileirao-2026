@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trophy, Menu, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
