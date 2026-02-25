@@ -303,6 +303,18 @@ export const AdminModal = ({ isOpen, onClose }: AdminModalProps) => {
           </div>
         </DialogHeader>
 
+        {!useFirebase && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-900">Modo local — dados só neste navegador</p>
+              <p className="text-sm text-amber-800 mt-1">
+                Em outro navegador ou dispositivo os dados não aparecem. Configure as variáveis de ambiente do Firebase na Vercel (veja DEPLOY.md).
+              </p>
+            </div>
+          </div>
+        )}
+
         <Tabs defaultValue="overview" className="mt-6">
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">

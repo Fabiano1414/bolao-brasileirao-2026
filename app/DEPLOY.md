@@ -21,21 +21,25 @@ app
 
 ---
 
-## Variáveis de ambiente (produção)
+## Variáveis de ambiente (produção) — **OBRIGATÓRIO PARA DADOS ENTRE NAVEGADORES**
 
-Adicione no painel do seu provedor de hospedagem:
+Sem o Firebase configurado na Vercel, o app usa **localStorage** — os dados ficam só no navegador onde foram criados. Em outro navegador ou dispositivo, aparece vazio.
 
-```
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-VITE_FIREBASE_VAPID_KEY=  # Push: Firebase Console > Cloud Messaging > Web Push
-```
+**Como corrigir:** Vercel → seu projeto → **Settings** → **Environment Variables**
 
-*(Copie os valores do seu `.env` local.)*
+Adicione todas estas variáveis (copie do seu `.env` local):
+
+| Variável | Exemplo |
+|----------|---------|
+| `VITE_FIREBASE_API_KEY` | `AIzaSy...` |
+| `VITE_FIREBASE_AUTH_DOMAIN` | `seu-projeto.firebaseapp.com` |
+| `VITE_FIREBASE_PROJECT_ID` | `seu-projeto` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `seu-projeto.appspot.com` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `123456789` |
+| `VITE_FIREBASE_APP_ID` | `1:123456789:web:...` |
+| `VITE_FIREBASE_VAPID_KEY` | *(opcional, para push)* |
+
+**Depois de salvar**, faça um novo deploy (ou aguarde o automático).
 
 ---
 
