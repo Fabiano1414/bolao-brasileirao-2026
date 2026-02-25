@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 
 function AppContent() {
   const { isAdmin } = useAuth();
-  const { getPool, getPublicPoolsList } = usePoolsContext();
+  const { getPool, getPublicPoolsList, pools } = usePoolsContext();
   const [createPoolOpen, setCreatePoolOpen] = useState(false);
   const [poolDetailsOpen, setPoolDetailsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -32,13 +32,14 @@ function AppContent() {
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined);
 
-  /** Abre o modal do bolão ao chegar com link de convite (?pool=ID&code=XXX) */
+  /** Abre o modal do bolão ao chegar com link de convite (?pool=ID&code=XXX).
+   * Reage a mudanças em pools para quando os dados vêm do Firestore (carregamento assíncrono). */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const poolId = params.get('pool');
     const code = params.get('code') ?? undefined;
     if (poolId) {
-      const pool = getPool(poolId);
+      const pool = pools.find(p => p.id === poolId);
       if (pool) {
         setSelectedPool(pool);
         setInviteCode(code);
@@ -46,8 +47,7 @@ function AppContent() {
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pools]);
 
   /** Acesso admin via URL: ?admin=1 — faça login e acesse /?admin=1 */
   useEffect(() => {

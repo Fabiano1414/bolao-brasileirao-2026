@@ -7,5 +7,25 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update, delete: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Bolões: qualquer usuário autenticado pode ler; criar/atualizar/excluir requer auth
+    match /pools/{poolId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Palpites: leitura autenticada; criar apenas o próprio palpite (userId deve ser o auth)
+    match /predictions/{predictionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Resultados dos jogos: leitura autenticada; escrita para sincronização
+    match /config/matchResults {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
   }
 }

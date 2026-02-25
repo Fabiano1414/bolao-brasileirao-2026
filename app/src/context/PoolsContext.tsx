@@ -2,6 +2,22 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { Pool, Prediction, User } from '@/types';
 import { initialPools } from '@/data/pools';
 import { useMatchesContext } from '@/context/MatchesContext';
+import { useAuth } from '@/hooks/useAuth';
+import { isFirebaseConfigured } from '@/lib/firebase';
+import {
+  subscribePools as firestoreSubscribePools,
+  subscribePredictions as firestoreSubscribePredictions,
+  subscribeMatchResults as firestoreSubscribeMatchResults,
+  createPoolInFirestore,
+  updatePoolInFirestore,
+  updatePoolMembersInFirestore,
+  deletePoolInFirestore,
+  savePredictionInFirestore,
+  deletePredictionInFirestore,
+  deletePredictionsByUserAndPool,
+  setMatchResultInFirestore,
+  setMatchResultsBatchInFirestore,
+} from '@/lib/firestorePools';
 
 const PREDICTIONS_STORAGE_KEY = 'bolao_predictions';
 const MATCH_RESULTS_STORAGE_KEY = 'bolao_match_results';
@@ -146,32 +162,60 @@ function calculatePointsForPrediction(
   return predSign === resultSign ? POINTS_RESULT : 0;
 }
 
+function getInitialPoolsLocal(): Pool[] {
+  try {
+    const loaded = loadPoolsFromStorage();
+    if (Array.isArray(loaded) && loaded.length > 0) return loaded;
+  } catch {
+    // dados corrompidos — começa vazio
+  }
+  return initialPools;
+}
+
 export function PoolsProvider({ children }: { children: ReactNode }) {
+  const { useFirebase } = useAuth();
   const { getUpcomingMatches, matches, getMatchById, isLoading: matchesLoading } = useMatchesContext();
-  const [pools, setPools] = useState<Pool[]>(() => {
-    try {
-      const loaded = loadPoolsFromStorage();
-      if (Array.isArray(loaded) && loaded.length > 0) return loaded;
-    } catch {
-      // dados corrompidos — começa vazio
-    }
-    return initialPools;
-  });
+
+  const [pools, setPools] = useState<Pool[]>(() =>
+    isFirebaseConfigured() ? [] : getInitialPoolsLocal()
+  );
+  const [predictions, setPredictions] = useState<Prediction[]>(() =>
+    isFirebaseConfigured() ? [] : loadPredictionsFromStorage()
+  );
+  const [matchResults, setMatchResults] = useState<Record<string, MatchResult>>(() =>
+    isFirebaseConfigured() ? {} : loadMatchResultsFromStorage()
+  );
   const [isLoading, setIsLoading] = useState(false);
-  const [predictions, setPredictions] = useState<Prediction[]>(loadPredictionsFromStorage);
-  const [matchResults, setMatchResults] = useState<Record<string, MatchResult>>(loadMatchResultsFromStorage);
+
+  // Firestore: real-time subscriptions
+  useEffect(() => {
+    if (!useFirebase) return;
+    const addMatches = (pool: Pool) => ({ ...pool, matches: getUpcomingMatches(10) });
+    const onPools = (pools: Pool[]) => setPools(pools.filter(p => !isLegacyMockPool(p)));
+    const unsubPools = firestoreSubscribePools(addMatches, onPools);
+    const unsubPreds = firestoreSubscribePredictions(setPredictions);
+    const unsubResults = firestoreSubscribeMatchResults(setMatchResults);
+    return () => {
+      unsubPools();
+      unsubPreds();
+      unsubResults();
+    };
+  }, [useFirebase, getUpcomingMatches]);
 
   useEffect(() => {
+    if (useFirebase) return;
     savePredictionsToStorage(predictions);
-  }, [predictions]);
+  }, [useFirebase, predictions]);
 
   useEffect(() => {
+    if (useFirebase) return;
     saveMatchResultsToStorage(matchResults);
-  }, [matchResults]);
+  }, [useFirebase, matchResults]);
 
   useEffect(() => {
+    if (useFirebase) return;
     savePoolsToStorage(pools);
-  }, [pools]);
+  }, [useFirebase, pools]);
 
   const getMatchResult = useCallback((matchId: string) => matchResults[matchId], [matchResults]);
 
@@ -224,7 +268,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, useFirebase ? 200 : 800));
     const poolId = Date.now().toString();
     const newPool: Pool = {
       id: poolId,
@@ -251,7 +295,17 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       status: 'active'
     };
 
-    setPools(prev => [newPool, ...prev]);
+    if (useFirebase) {
+      try {
+        await createPoolInFirestore(newPool);
+        setPools(prev => [newPool, ...prev]); // otimista até subscription atualizar
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[Pools] createPool Firestore error:', e);
+        throw e;
+      }
+    } else {
+      setPools(prev => [newPool, ...prev]);
+    }
     setIsLoading(false);
     return newPool;
   };
@@ -259,23 +313,28 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   const updatePool = (poolId: string, userId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate'>>): boolean => {
     const pool = pools.find(p => p.id === poolId);
     if (!pool || pool.ownerId !== userId) return false;
-    setPools(prev => prev.map(p => {
-      if (p.id !== poolId) return p;
-      const base = { ...p, ...updates };
-      if (updates.isPrivate === true && !base.code) {
-        return { ...base, code: Math.random().toString(36).substring(2, 10).toUpperCase() };
-      }
-      if (updates.isPrivate === false) {
-        return { ...base, code: undefined };
-      }
-      return base;
-    }));
+    const base = { ...pool, ...updates };
+    if (updates.isPrivate === true && !base.code) {
+      Object.assign(base, { code: Math.random().toString(36).substring(2, 10).toUpperCase() });
+    }
+    if (updates.isPrivate === false) base.code = undefined;
+    setPools(prev => prev.map(p => (p.id !== poolId ? p : base)));
+    if (useFirebase) {
+      const firestoreUpdates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate' | 'code'>> = {
+        name: base.name,
+        description: base.description,
+        prize: base.prize,
+        isPrivate: base.isPrivate,
+        code: base.code,
+      };
+      updatePoolInFirestore(poolId, firestoreUpdates).catch(e => import.meta.env.DEV && console.warn('[Pools] updatePool Firestore:', e));
+    }
     return true;
   };
 
   const joinPool = async (poolId: string, user: User, code?: string): Promise<boolean> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await new Promise(resolve => setTimeout(resolve, useFirebase ? 150 : 600));
 
     const pool = pools.find(p => p.id === poolId);
     if (!pool) {
@@ -299,11 +358,20 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
         rank: pool.members.length + 1,
         joinedAt: new Date()
       };
+      const newMembers = [...pool.members, newMember];
       setPools(prev => prev.map(p =>
-        p.id === poolId
-          ? { ...p, members: [...p.members, newMember] }
-          : p
+        p.id === poolId ? { ...p, members: newMembers } : p
       ));
+      if (useFirebase) {
+        try {
+          await updatePoolMembersInFirestore(poolId, newMembers);
+        } catch (e) {
+          if (import.meta.env.DEV) console.warn('[Pools] joinPool Firestore:', e);
+          setPools(prev => prev.map(p => (p.id === poolId ? { ...p, members: pool.members } : p)));
+          setIsLoading(false);
+          return false;
+        }
+      }
     }
 
     setIsLoading(false);
@@ -314,17 +382,19 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     const pool = pools.find(p => p.id === poolId);
     if (!pool || pool.ownerId === userId) return false;
 
-    setPools(prev => prev.map(p => {
-      if (p.id !== poolId) return p;
-      const newMembers = p.members.filter(m => m.userId !== userId);
-      const sorted = [...newMembers].sort((a, b) => b.points - a.points);
-      return {
-        ...p,
-        members: sorted.map((m, i) => ({ ...m, rank: i + 1 }))
-      };
-    }));
+    const newMembers = pool.members.filter(m => m.userId !== userId);
+    const sorted = [...newMembers].sort((a, b) => b.points - a.points);
+    const updatedMembers = sorted.map((m, i) => ({ ...m, rank: i + 1 }));
 
+    setPools(prev => prev.map(p =>
+      p.id !== poolId ? p : { ...p, members: updatedMembers }
+    ));
     setPredictions(prev => prev.filter(p => !(p.poolId === poolId && p.userId === userId)));
+
+    if (useFirebase) {
+      updatePoolMembersInFirestore(poolId, updatedMembers).catch(() => {});
+      deletePredictionsByUserAndPool(poolId, userId).catch(() => {});
+    }
     return true;
   };
 
@@ -334,6 +404,9 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
 
     setPools(prev => prev.filter(p => p.id !== poolId));
     setPredictions(prev => prev.filter(p => p.poolId !== poolId));
+    if (useFirebase) {
+      deletePoolInFirestore(poolId).catch(e => import.meta.env.DEV && console.warn('[Pools] deletePool Firestore:', e));
+    }
     return true;
   };
 
@@ -342,65 +415,99 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (!pool) return false;
     setPools(prev => prev.filter(p => p.id !== poolId));
     setPredictions(prev => prev.filter(p => p.poolId !== poolId));
+    if (useFirebase) {
+      deletePoolInFirestore(poolId).catch(e => import.meta.env.DEV && console.warn('[Pools] adminDeletePool Firestore:', e));
+    }
     return true;
   };
 
   const adminUpdatePool = useCallback((poolId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate' | 'code'>>): boolean => {
     const pool = pools.find(p => p.id === poolId);
     if (!pool) return false;
-    setPools(prev => prev.map(p => {
-      if (p.id !== poolId) return p;
-      const base = { ...p, ...updates };
-      if (updates.isPrivate === true && !base.code) {
-        return { ...base, code: Math.random().toString(36).substring(2, 10).toUpperCase() };
-      }
-      if (updates.isPrivate === false) {
-        return { ...base, code: undefined };
-      }
-      return base;
-    }));
+    const base = { ...pool, ...updates };
+    if (updates.isPrivate === true && !base.code) {
+      base.code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    }
+    if (updates.isPrivate === false) base.code = undefined;
+    setPools(prev => prev.map(p => (p.id !== poolId ? p : base)));
+    if (useFirebase) {
+      updatePoolInFirestore(poolId, base).catch(e => import.meta.env.DEV && console.warn('[Pools] adminUpdatePool Firestore:', e));
+    }
     return true;
-  }, [pools]);
+  }, [pools, useFirebase]);
 
   const adminUpdateMemberUser = useCallback((userId: string, updates: Partial<Pick<User, 'name' | 'avatar'>>) => {
-    setPools(prev => prev.map(pool => ({
-      ...pool,
-      owner: pool.ownerId === userId ? { ...pool.owner, ...updates } : pool.owner,
-      members: pool.members.map(m =>
-        m.userId === userId ? { ...m, user: { ...m.user, ...updates } } : m
-      )
-    })));
-  }, []);
+    let updatedPools: Pool[] = [];
+    setPools(prev => {
+      updatedPools = prev.map(pool => ({
+        ...pool,
+        owner: pool.ownerId === userId ? { ...pool.owner, ...updates } : pool.owner,
+        members: pool.members.map(m =>
+          m.userId === userId ? { ...m, user: { ...m.user, ...updates } } : m
+        )
+      }));
+      return updatedPools;
+    });
+    if (useFirebase) {
+      updatedPools.forEach(pool => {
+        if (pool.ownerId === userId) {
+          updatePoolInFirestore(pool.id, { owner: pool.owner }).catch(() => {});
+        }
+        const hasMember = pool.members.some(m => m.userId === userId);
+        if (hasMember) {
+          updatePoolMembersInFirestore(pool.id, pool.members).catch(() => {});
+        }
+      });
+    }
+  }, [useFirebase]);
 
   const adminDeleteUserData = useCallback((userId: string) => {
-    setPools(prev => prev
-      .filter(p => p.ownerId !== userId)
-      .map(pool => ({
-        ...pool,
-        members: pool.members.filter(m => m.userId !== userId)
-      })));
+    setPools(prev => {
+      if (useFirebase) {
+        prev.forEach(pool => {
+          if (pool.ownerId === userId) {
+            deletePoolInFirestore(pool.id).catch(() => {});
+          } else if (pool.members.some(m => m.userId === userId)) {
+            const newMembers = pool.members.filter(m => m.userId !== userId);
+            const sorted = [...newMembers].sort((a, b) => b.points - a.points);
+            updatePoolMembersInFirestore(pool.id, sorted.map((m, i) => ({ ...m, rank: i + 1 }))).catch(() => {});
+            deletePredictionsByUserAndPool(pool.id, userId).catch(() => {});
+          }
+        });
+      }
+      return prev
+        .filter(p => p.ownerId !== userId)
+        .map(pool => ({ ...pool, members: pool.members.filter(m => m.userId !== userId) }));
+    });
     setPredictions(prev => prev.filter(p => p.userId !== userId));
-  }, []);
+  }, [useFirebase]);
 
   const adminRemoveUserFromPool = useCallback((poolId: string, userId: string) => {
     const pool = pools.find(p => p.id === poolId);
     if (!pool || pool.ownerId === userId) return false;
-    setPools(prev => prev.map(p => {
-      if (p.id !== poolId) return p;
-      const newMembers = p.members.filter(m => m.userId !== userId);
-      const sorted = [...newMembers].sort((a, b) => b.points - a.points);
-      return { ...p, members: sorted.map((m, i) => ({ ...m, rank: i + 1 })) };
-    }));
+    const newMembers = pool.members.filter(m => m.userId !== userId);
+    const sorted = [...newMembers].sort((a, b) => b.points - a.points);
+    const updatedMembers = sorted.map((m, i) => ({ ...m, rank: i + 1 }));
+    setPools(prev => prev.map(p =>
+      p.id !== poolId ? p : { ...p, members: updatedMembers }
+    ));
     setPredictions(prev => prev.filter(p => !(p.poolId === poolId && p.userId === userId)));
+    if (useFirebase) {
+      updatePoolMembersInFirestore(poolId, updatedMembers).catch(() => {});
+      deletePredictionsByUserAndPool(poolId, userId).catch(() => {});
+    }
     return true;
-  }, [pools]);
+  }, [pools, useFirebase]);
 
   const adminDeletePrediction = useCallback((predictionId: string) => {
     const pred = predictions.find(p => p.id === predictionId);
     if (!pred) return false;
     setPredictions(prev => prev.filter(p => p.id !== predictionId));
+    if (useFirebase) {
+      deletePredictionInFirestore(predictionId).catch(() => {});
+    }
     return true;
-  }, [predictions]);
+  }, [predictions, useFirebase]);
 
   const adminGetAllPredictions = useCallback(() => predictions, [predictions]);
 
@@ -428,19 +535,23 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       const cutoff = matchDate.getTime() - BET_CLOSE_MINUTES * MS_PER_MINUTE;
       if (Date.now() >= cutoff) return; // Regra: não aceita palpite após 5 min antes do jogo
     }
+    const newPred: Prediction = {
+      id: `pred-${poolId}-${matchId}-${userId}`,
+      poolId,
+      userId,
+      matchId,
+      homeScore,
+      awayScore,
+      createdAt: new Date()
+    };
     setPredictions(prev => {
       const filtered = prev.filter(p => !(p.poolId === poolId && p.matchId === matchId && p.userId === userId));
-      return [...filtered, {
-        id: `pred-${poolId}-${matchId}-${userId}`,
-        poolId,
-        userId,
-        matchId,
-        homeScore,
-        awayScore,
-        createdAt: new Date()
-      }];
+      return [...filtered, newPred];
     });
-  }, [getMatchById]);
+    if (useFirebase) {
+      savePredictionInFirestore(newPred).catch(e => import.meta.env.DEV && console.warn('[Pools] savePrediction Firestore:', e));
+    }
+  }, [getMatchById, useFirebase]);
 
   const getUserPrediction = useCallback((poolId: string, userId: string, matchId: string) => {
     const p = predictions.find(x => x.poolId === poolId && x.matchId === matchId && x.userId === userId);
@@ -449,21 +560,29 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
 
   const setMatchResult = useCallback((matchId: string, homeScore: number, awayScore: number) => {
     setMatchResults(prev => ({ ...prev, [matchId]: { homeScore, awayScore } }));
-  }, []);
+    if (useFirebase) {
+      setMatchResultInFirestore(matchId, homeScore, awayScore).catch(e => import.meta.env.DEV && console.warn('[Pools] setMatchResult Firestore:', e));
+    }
+  }, [useFirebase]);
 
   const syncResultsFromApi = useCallback(async (): Promise<{ count: number }> => {
     const { fetchMatchResultsFromApi } = await import('@/lib/matchResultsApi');
     const results = await fetchMatchResultsFromApi(matches);
     if (results.length === 0) return { count: 0 };
-    setMatchResults(prev => {
-      const next = { ...prev };
-      results.forEach(r => {
-        next[r.matchId] = { homeScore: r.homeScore, awayScore: r.awayScore };
-      });
-      return next;
+    const newResults: Record<string, MatchResult> = {};
+    results.forEach(r => {
+      newResults[r.matchId] = { homeScore: r.homeScore, awayScore: r.awayScore };
     });
+    setMatchResults(prev => ({ ...prev, ...newResults }));
+    if (useFirebase) {
+      try {
+        await setMatchResultsBatchInFirestore(newResults);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[Pools] syncResultsFromApi Firestore:', e);
+      }
+    }
     return { count: results.length };
-  }, [matches]);
+  }, [matches, useFirebase]);
 
   /** Sincronização automática de resultados: assim que jogos carregam e a cada 10 min.
    * Resultados da API → matchResults → recalculateAllPools atualiza os pontos. */
