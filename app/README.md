@@ -55,6 +55,20 @@ Saída em `dist/`. Para preview local:
 npm run preview
 ```
 
+## Deploy (Firebase + Vercel)
+
+Na **raiz do projeto** (pasta pai da `app`):
+
+```bash
+# Publicar regras do Firestore
+npm run deploy:firebase
+
+# Deploy manual na Vercel (opcional; o normal é git push)
+npm run vercel:deploy
+```
+
+Veja `DEPLOY.md` para variáveis de ambiente e configuração.
+
 ## Regras de pontuação
 
 | Acerto              | Pontos |

@@ -1,5 +1,21 @@
 # Configuração para deploy (Vercel, Netlify, etc.)
 
+## Comandos rápidos (na raiz do projeto)
+
+```bash
+# Firebase: publicar regras do Firestore (após editar app/firestore.rules)
+npm run deploy:firebase
+
+# Vercel: deploy manual (opcional — normalmente basta git push)
+npm run vercel:deploy
+```
+
+**Vercel:** Conectado ao GitHub — cada `git push origin main` dispara deploy automático.
+
+**Firebase:** Após alterar `app/firestore.rules`, rode `npm run deploy:firebase`.
+
+---
+
 ## Diretório raiz / Root Directory
 
 ```

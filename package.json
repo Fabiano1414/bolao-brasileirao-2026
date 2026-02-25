@@ -1,0 +1,8 @@
+{
+  "name": "bolao-brasileirao-2025",
+  "private": true,
+  "scripts": {
+    "deploy:firebase": "firebase use bolaobrasileirao2026 && firebase deploy --only firestore:rules",
+    "vercel:deploy": "cd app && npx vercel --prod"
+  }
+}
