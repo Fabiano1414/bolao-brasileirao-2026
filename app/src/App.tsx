@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { MatchesProvider } from '@/context/MatchesContext';
 import { PoolsProvider, usePoolsContext } from '@/context/PoolsContext';
@@ -24,6 +25,22 @@ import { toast } from 'sonner';
 function AppContent() {
   const { isAdmin } = useAuth();
   const { getPool, getPublicPoolsList, pools } = usePoolsContext();
+  const { needRefresh, updateServiceWorker } = useRegisterSW();
+  const updateToastShown = useRef(false);
+
+  useEffect(() => {
+    if (needRefresh && !updateToastShown.current) {
+      updateToastShown.current = true;
+      toast.info('Nova versão disponível', {
+        description: 'Clique para atualizar o app.',
+        action: {
+          label: 'Atualizar',
+          onClick: () => updateServiceWorker(true),
+        },
+      });
+    }
+    if (!needRefresh) updateToastShown.current = false;
+  }, [needRefresh, updateServiceWorker]);
   const [createPoolOpen, setCreatePoolOpen] = useState(false);
   const [poolDetailsOpen, setPoolDetailsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
