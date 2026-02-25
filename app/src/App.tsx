@@ -207,7 +207,7 @@ function AppContent() {
                 </div>
               ))}
               <p className="mt-2 text-amber-900">
-                Variáveis com ✗ não foram carregadas. Verifique: 1) Nomes exatos na Vercel 2) Ambiente Production 3) Redeploy após salvar
+                Variáveis com ✗ não foram carregadas. Verifique: 1) Nomes exatos na Vercel 2) Marque Production e Preview 3) Redeploy após salvar
               </p>
             </div>
           )}
