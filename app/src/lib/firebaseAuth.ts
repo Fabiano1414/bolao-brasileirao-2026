@@ -17,7 +17,8 @@ import {
   setDoc,
   updateDoc,
   collection,
-  getDocs,
+  getDocsFromServer,
+  Timestamp,
 } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from './firebase';
 import type { User } from '@/types';
@@ -70,15 +71,21 @@ export async function firebaseRegister(
 
   const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password.trim());
   const now = new Date();
+  const userData = {
+    name: name.trim(),
+    avatar: avatarDataUrl?.trim() || null,
+    createdAt: Timestamp.fromDate(now),
+    email: cred.user.email ?? '',
+  };
   try {
-    await setDoc(doc(database, USERS_COLLECTION, cred.user.uid), {
-      name: name.trim(),
-      avatar: avatarDataUrl?.trim() || null,
-      createdAt: now,
-      email: cred.user.email,
-    });
-  } catch {
-    // Firestore falhou (regras, rede) — não bloqueia; usuário foi criado no Auth
+    await setDoc(doc(database, USERS_COLLECTION, cred.user.uid), userData);
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('[Auth] firebaseRegister setDoc falhou:', e);
+    try {
+      await setDoc(doc(database, USERS_COLLECTION, cred.user.uid), userData, { merge: true });
+    } catch {
+      // Falhou novamente — usuário existe no Auth, perfil será criado no próximo login
+    }
   }
   return toAppUser(cred.user, { name: name.trim(), avatar: avatarDataUrl, createdAt: now });
 }
@@ -131,7 +138,7 @@ export async function firebaseGetAllUsers(): Promise<User[]> {
   const database = getFirebaseDb();
   if (!auth || !database) return [];
 
-  const snapshot = await getDocs(collection(database, USERS_COLLECTION));
+  const snapshot = await getDocsFromServer(collection(database, USERS_COLLECTION));
   const users: User[] = [];
   for (const docSnap of snapshot.docs) {
     const d = docSnap.data();
@@ -160,7 +167,24 @@ export function firebaseSubscribeToAuth(callback: (user: User | null) => void): 
       callback(null);
       return;
     }
-    const profile = await firebaseGetUserProfile(fbUser.uid);
+    let profile = await firebaseGetUserProfile(fbUser.uid);
+    if (!profile && database) {
+      try {
+        await setDoc(
+          doc(database, USERS_COLLECTION, fbUser.uid),
+          {
+            name: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'Usuário',
+            avatar: fbUser.photoURL ?? null,
+            email: fbUser.email ?? '',
+            createdAt: Timestamp.fromDate(new Date()),
+          },
+          { merge: true }
+        );
+        profile = await firebaseGetUserProfile(fbUser.uid);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[Auth] Criar perfil Firestore falhou:', e);
+      }
+    }
     if (profile) {
       callback(toAppUser(fbUser, profile));
     } else {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -92,14 +92,18 @@ export const AdminModal = ({ isOpen, onClose }: AdminModalProps) => {
   const [editingPool, setEditingPool] = useState<Pool | null>(null);
   const [settingPasswordFor, setSettingPasswordFor] = useState<{ user: User; password: string } | null>(null);
 
-  useEffect(() => {
+  const refreshUsers = useCallback(() => {
     const result = getAllUsers();
     if (Array.isArray(result)) {
       setAllUsers(result);
     } else {
       (result as Promise<User[]>).then(setAllUsers).catch(() => setAllUsers([]));
     }
-  }, [getAllUsers, isOpen]);
+  }, [getAllUsers]);
+
+  useEffect(() => {
+    refreshUsers();
+  }, [refreshUsers, isOpen]);
 
   if (!user) return null;
   const allPredictions = adminGetAllPredictions();
@@ -448,15 +452,20 @@ export const AdminModal = ({ isOpen, onClose }: AdminModalProps) => {
           </TabsContent>
 
           <TabsContent value="users" className="mt-4">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
+            <div className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
                 type="text"
                 placeholder="Buscar por nome ou email..."
                 value={searchUsers}
                 onChange={(e) => setSearchUsers(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm"
               />
+              </div>
+              <Button variant="outline" size="sm" onClick={refreshUsers} title="Atualizar lista de usuários">
+                <RefreshCw className="w-4 h-4" />
+              </Button>
             </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
               {filterUsers.length === 0 ? (
