@@ -166,6 +166,31 @@ export function subscribeMatchResults(onResults: (results: Record<string, MatchR
   );
 }
 
+/** Fetch único (fallback quando real-time falha ou ao voltar à aba) */
+export async function fetchPoolsOnce(
+  addMatches: (pool: Pool) => Pool
+): Promise<Pool[]> {
+  const db = getFirebaseDb();
+  if (!db) return [];
+  const snap = await getDocs(collection(db, POOLS_COLLECTION));
+  return snap.docs.map((d) => addMatches(fromFirestorePool(d.id, d.data())));
+}
+
+export async function fetchPredictionsOnce(): Promise<Prediction[]> {
+  const db = getFirebaseDb();
+  if (!db) return [];
+  const snap = await getDocs(collection(db, PREDICTIONS_COLLECTION));
+  return snap.docs.map((d) => fromFirestorePrediction(d.id, d.data()));
+}
+
+export async function fetchMatchResultsOnce(): Promise<Record<string, MatchResult>> {
+  const db = getFirebaseDb();
+  if (!db) return {};
+  const snap = await getDoc(doc(db, MATCH_RESULTS_DOC));
+  const data = snap.data();
+  return (data?.results as Record<string, MatchResult>) ?? {};
+}
+
 export async function createPoolInFirestore(pool: Pool): Promise<void> {
   const db = getFirebaseDb();
   if (!db) throw new Error('Firestore não disponível');

@@ -8,6 +8,9 @@ import {
   subscribePools as firestoreSubscribePools,
   subscribePredictions as firestoreSubscribePredictions,
   subscribeMatchResults as firestoreSubscribeMatchResults,
+  fetchPoolsOnce as firestoreFetchPoolsOnce,
+  fetchPredictionsOnce as firestoreFetchPredictionsOnce,
+  fetchMatchResultsOnce as firestoreFetchMatchResultsOnce,
   createPoolInFirestore,
   updatePoolInFirestore,
   updatePoolMembersInFirestore,
@@ -202,10 +205,33 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     const unsubPools = firestoreSubscribePools(addMatches, onPools);
     const unsubPreds = firestoreSubscribePredictions(setPredictions);
     const unsubResults = firestoreSubscribeMatchResults(setMatchResults);
+
+    /** Fallback: quando usuário volta à aba ou a cada 30s — garante que novos bolões apareçam */
+    const syncFromFirestore = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const [p, preds, results] = await Promise.all([
+          firestoreFetchPoolsOnce(addMatches),
+          firestoreFetchPredictionsOnce(),
+          firestoreFetchMatchResultsOnce(),
+        ]);
+        setPools(p.filter((po) => !isLegacyMockPool(po)));
+        setPredictions(preds);
+        setMatchResults(results);
+      } catch {
+        // ignore
+      }
+    };
+    const onVisible = () => void syncFromFirestore();
+    document.addEventListener('visibilitychange', onVisible);
+    const interval = setInterval(syncFromFirestore, 30_000);
+
     return () => {
       unsubPools();
       unsubPreds();
       unsubResults();
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(interval);
     };
   }, [useFirebase, user, getUpcomingMatches]);
 
