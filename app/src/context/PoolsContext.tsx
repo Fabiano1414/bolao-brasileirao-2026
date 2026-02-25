@@ -9,6 +9,7 @@ import {
   subscribePredictions as firestoreSubscribePredictions,
   subscribeMatchResults as firestoreSubscribeMatchResults,
   fetchPoolsOnce as firestoreFetchPoolsOnce,
+  fetchPoolById as firestoreFetchPoolById,
   fetchPredictionsOnce as firestoreFetchPredictionsOnce,
   fetchMatchResultsOnce as firestoreFetchMatchResultsOnce,
   createPoolInFirestore,
@@ -41,6 +42,7 @@ interface PoolsContextType {
   leavePool: (poolId: string, userId: string) => boolean;
   deletePool: (poolId: string, userId: string) => boolean;
   getPool: (id: string) => Pool | undefined;
+  fetchPoolByIdForInvite: (poolId: string) => Promise<Pool | null>;
   getUserPoolsList: (userId: string) => Pool[];
   getPublicPoolsList: () => Pool[];
   savePrediction: (poolId: string, userId: string, matchId: string, homeScore: number, awayScore: number) => void;
@@ -607,6 +609,19 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     return pools.find(p => p.id === id);
   };
 
+  const fetchPoolByIdForInvite = useCallback(
+    async (poolId: string): Promise<Pool | null> => {
+      if (!useFirebase) return null;
+      const addMatches = (pool: Pool) => ({ ...pool, matches: getUpcomingMatches(10) });
+      try {
+        return await firestoreFetchPoolById(poolId, addMatches);
+      } catch {
+        return null;
+      }
+    },
+    [useFirebase, getUpcomingMatches]
+  );
+
   const getUserPoolsList = (userId: string): Pool[] => {
     return pools.filter(pool =>
       pool.ownerId === userId || pool.members.some(m => m.userId === userId)
@@ -791,6 +806,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     leavePool,
     deletePool,
     getPool,
+    fetchPoolByIdForInvite,
     getUserPoolsList,
     getPublicPoolsList,
     savePrediction,

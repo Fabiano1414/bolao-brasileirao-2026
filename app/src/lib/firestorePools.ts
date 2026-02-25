@@ -176,6 +176,18 @@ export async function fetchPoolsOnce(
   return snap.docs.map((d) => addMatches(fromFirestorePool(d.id, d.data())));
 }
 
+/** Busca um bolão específico por ID (para links de convite) */
+export async function fetchPoolById(
+  poolId: string,
+  addMatches: (pool: Pool) => Pool
+): Promise<Pool | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+  const snap = await getDoc(doc(db, POOLS_COLLECTION, poolId));
+  if (!snap.exists()) return null;
+  return addMatches(fromFirestorePool(snap.id, snap.data()));
+}
+
 export async function fetchPredictionsOnce(): Promise<Prediction[]> {
   const db = getFirebaseDb();
   if (!db) return [];

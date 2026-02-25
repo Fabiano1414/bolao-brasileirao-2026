@@ -12,10 +12,12 @@ import { Label } from '@/components/ui/label';
 import { Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+type EnterInviteResult = 'ok' | 'need_login' | 'local_mode' | 'fetching';
+
 interface EnterWithInviteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEnter: (poolId: string, code?: string) => boolean;
+  onEnter: (poolId: string, code?: string) => EnterInviteResult;
 }
 
 /** Extrai pool e code de URL ou string (ex: ?pool=123&code=ABC ou https://...?pool=123&code=ABC) */
@@ -54,14 +56,28 @@ export function EnterWithInviteModal({
       });
       return;
     }
-    const ok = onEnter(parsed.poolId, parsed.code);
-    if (ok) {
+    const result = onEnter(parsed.poolId, parsed.code);
+    if (result === 'ok') {
       setInput('');
       onClose();
     } else {
-      toast.info('Carregando bolão...', {
-        description: 'O bolão será aberto assim que estiver disponível.',
-      });
+      const messages: Record<EnterInviteResult, { title: string; description: string }> = {
+        ok: { title: '', description: '' },
+        need_login: {
+          title: 'Faça login',
+          description: 'Você precisa estar logado para acessar o bolão.',
+        },
+        local_mode: {
+          title: 'Modo local',
+          description: 'Links de convite só funcionam com Firebase. Configure nas variáveis de ambiente.',
+        },
+        fetching: {
+          title: 'Carregando bolão...',
+          description: 'O bolão será aberto em instantes.',
+        },
+      };
+      const { title, description } = messages[result];
+      toast.info(title, { description });
     }
   };
 

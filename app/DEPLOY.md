@@ -59,7 +59,22 @@ Adicione todas estas variáveis (copie do seu `.env` local):
 
 **Depois de salvar**, faça um novo deploy: **Deployments** → ⋮ no último deploy → **Redeploy**.
 
-**Como verificar:** Após o deploy, se aparecer o banner amarelo "Modo local" no topo do app, as variáveis não foram carregadas — confira o ambiente Production e redeploy.
+**Como verificar:** Após o deploy, se aparecer o banner amarelo "Modo local" no topo do app, as variáveis não foram carregadas.
+
+---
+
+## Banner amarelo continua? Checklist
+
+1. **Ambiente correto** — Ao criar cada variável, marque **Production** e **Preview**. URLs com hash (ex: `-jne8vizrk-`) são Preview; se só Production estiver marcado, o Preview não terá as variáveis.
+2. **Nomes exatos** — Use exatamente:
+   - `VITE_FIREBASE_API_KEY`
+   - `VITE_FIREBASE_AUTH_DOMAIN`
+   - `VITE_FIREBASE_PROJECT_ID`
+   - `VITE_FIREBASE_STORAGE_BUCKET`
+   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+   - `VITE_FIREBASE_APP_ID`
+3. **Redeploy** — Após salvar as variáveis: Deployments → ⋮ no último deploy → **Redeploy**.
+4. **Modo local manual** — Se você clicou em "Firebase com problemas? Usar modo local" no app, isso gravou uma flag no navegador. Teste em **janela anônima** ou limpe os dados do site (F12 → Application → Local Storage → limpar).
 
 ---
 

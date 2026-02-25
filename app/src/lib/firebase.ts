@@ -47,6 +47,24 @@ export function isFirebaseManuallyDisabled(): boolean {
   return typeof localStorage !== 'undefined' && localStorage.getItem(FIREBASE_DISABLED_KEY) === '1';
 }
 
+/** Diagnóstico: quais variáveis estão definidas (sem expor valores). Para depuração. */
+export function getFirebaseEnvDiagnostic(): { name: string; status: 'ok' | 'missing' | 'literal_undefined' }[] {
+  const vars = [
+    'VITE_FIREBASE_API_KEY',
+    'VITE_FIREBASE_AUTH_DOMAIN',
+    'VITE_FIREBASE_PROJECT_ID',
+    'VITE_FIREBASE_STORAGE_BUCKET',
+    'VITE_FIREBASE_MESSAGING_SENDER_ID',
+    'VITE_FIREBASE_APP_ID',
+  ] as const;
+  return vars.map((name) => {
+    const val = import.meta.env[name];
+    if (!val) return { name, status: 'missing' as const };
+    if (val === 'undefined') return { name, status: 'literal_undefined' as const };
+    return { name, status: 'ok' as const };
+  });
+}
+
 /** Log em dev: qual projeto Firebase está configurado (evita confusão de projectId) */
 if (import.meta.env.DEV && firebaseConfig.apiKey && firebaseConfig.projectId) {
   console.info('[Firebase] Projeto configurado:', firebaseConfig.projectId);

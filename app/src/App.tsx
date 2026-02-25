@@ -22,10 +22,11 @@ import { EnterWithInviteModal } from '@/components/modals/EnterWithInviteModal';
 import type { Pool } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
+import { isFirebaseManuallyDisabled, enableFirebaseAndReload, getFirebaseEnvDiagnostic } from '@/lib/firebase';
 
 function AppContent() {
-  const { isAdmin, useFirebase } = useAuth();
-  const { getPool, getPublicPoolsList, pools } = usePoolsContext();
+  const { isAdmin, useFirebase, user } = useAuth();
+  const { getPool, getPublicPoolsList, pools, fetchPoolByIdForInvite } = usePoolsContext();
   const { needRefresh, updateServiceWorker } = useRegisterSW();
   const updateToastShown = useRef(false);
 
@@ -51,24 +52,49 @@ function AppContent() {
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined);
   const [pendingInvite, setPendingInvite] = useState<{ poolId: string; code?: string } | null>(null);
+  const [showEnvDiagnostic, setShowEnvDiagnostic] = useState(false);
 
   /** Abre o modal do bolão ao chegar com link de convite (?pool=ID&code=XXX).
-   * Reage a mudanças em pools para quando os dados vêm do Firestore (carregamento assíncrono). */
+   * Primeiro verifica em pools; se não estiver e Firebase ativo, busca direto no Firestore. */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const poolId = params.get('pool') ?? pendingInvite?.poolId;
+    const poolIdFromUrl = params.get('pool');
+    const poolId = poolIdFromUrl ?? pendingInvite?.poolId;
     const code = params.get('code') ?? pendingInvite?.code ?? undefined;
-    if (poolId) {
-      const pool = pools.find(p => p.id === poolId);
-      if (pool) {
-        setSelectedPool(pool);
-        setInviteCode(code);
-        setPoolDetailsOpen(true);
-        setPendingInvite(null);
-        window.history.replaceState({}, '', window.location.pathname);
-      }
+    if (!poolId) return;
+
+    const poolFromList = pools.find(p => p.id === poolId);
+    if (poolFromList) {
+      setSelectedPool(poolFromList);
+      setInviteCode(code);
+      setPoolDetailsOpen(true);
+      setPendingInvite(null);
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
     }
-  }, [pools, pendingInvite]);
+
+    const shouldFetch = (poolIdFromUrl || pendingInvite) && user && useFirebase;
+    if (shouldFetch) {
+      let cancelled = false;
+      fetchPoolByIdForInvite(poolId).then((fetched) => {
+        if (cancelled) return;
+        setPendingInvite(null);
+        if (fetched) {
+          setSelectedPool(fetched);
+          setInviteCode(code);
+          setPoolDetailsOpen(true);
+          setEnterInviteOpen(false);
+          window.history.replaceState({}, '', window.location.pathname);
+          toast.success('Bolão carregado!', { description: `Bem-vindo ao bolão "${fetched.name}"` });
+        } else {
+          toast.error('Bolão não encontrado', {
+            description: 'Verifique o link ou peça um novo convite.',
+          });
+        }
+      });
+      return () => { cancelled = true; };
+    }
+  }, [pools, pendingInvite, user, useFirebase, fetchPoolByIdForInvite]);
 
   /** Acesso admin via URL: ?admin=1 — faça login e acesse /?admin=1 */
   useEffect(() => {
@@ -125,16 +151,18 @@ function AppContent() {
     setAdminOpen(true);
   };
 
-  const handleEnterWithInvite = (poolId: string, code?: string): boolean => {
+  const handleEnterWithInvite = (poolId: string, code?: string): 'ok' | 'need_login' | 'local_mode' | 'fetching' => {
     const pool = getPool(poolId);
     if (pool) {
       setSelectedPool(pool);
       setInviteCode(code);
       setPoolDetailsOpen(true);
-      return true;
+      return 'ok';
     }
+    if (!user) return 'need_login';
+    if (!useFirebase) return 'local_mode';
     setPendingInvite({ poolId, code });
-    return false;
+    return 'fetching';
   };
 
   return (
@@ -151,7 +179,38 @@ function AppContent() {
 
       {!useFirebase && (
         <div className="sticky top-0 z-30 bg-amber-500 text-amber-950 px-4 py-2.5 text-center text-sm font-medium shadow-md">
-          <span className="font-semibold">Modo local:</span> Os dados ficam só neste navegador — cada aba ou janela anônima vê dados isolados. Para compartilhar bolões entre todos os usuários, configure o Firebase na Vercel (Settings → Environment Variables).
+          <span className="font-semibold">Modo local:</span> Os dados ficam só neste navegador — cada aba ou janela anônima vê dados isolados. Para compartilhar bolões, configure o Firebase na Vercel (Settings → Environment Variables).
+          {!isFirebaseManuallyDisabled() && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => setShowEnvDiagnostic((v) => !v)}
+                className="underline font-bold hover:no-underline"
+              >
+                {showEnvDiagnostic ? 'Ocultar' : 'Ver'} diagnóstico
+              </button>
+            </>
+          )}
+          {isFirebaseManuallyDisabled() && (
+            <>{' '}
+              <button type="button" onClick={enableFirebaseAndReload} className="underline font-bold hover:no-underline">
+                Reativar Firebase
+              </button>
+            </>
+          )}
+          {showEnvDiagnostic && !isFirebaseManuallyDisabled() && (
+            <div className="mt-3 text-left max-w-xl mx-auto bg-amber-600/30 rounded px-3 py-2 text-xs font-mono">
+              {getFirebaseEnvDiagnostic().map(({ name, status }) => (
+                <div key={name}>
+                  {name}: {status === 'ok' ? '✓' : status === 'literal_undefined' ? '✗ (string "undefined")' : '✗ (vazio)'}
+                </div>
+              ))}
+              <p className="mt-2 text-amber-900">
+                Variáveis com ✗ não foram carregadas. Verifique: 1) Nomes exatos na Vercel 2) Ambiente Production 3) Redeploy após salvar
+              </p>
+            </div>
+          )}
         </div>
       )}
 
