@@ -3,15 +3,16 @@ import { PoolCard } from '@/components/ui/custom/PoolCard';
 import { useAuth } from '@/hooks/useAuth';
 import { usePoolsContext } from '@/context/PoolsContext';
 import { useInView } from '@/hooks/useInView';
-import { Trophy, LogIn } from 'lucide-react';
+import { Trophy, LogIn, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MyPoolsProps {
   onPoolClick: (poolId: string) => void;
   onCreatePool: () => void;
+  onEnterWithInvite?: () => void;
 }
 
-export const MyPools = ({ onPoolClick, onCreatePool }: MyPoolsProps) => {
+export const MyPools = ({ onPoolClick, onCreatePool, onEnterWithInvite }: MyPoolsProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: '-100px' });
   const { user } = useAuth();
@@ -96,6 +97,16 @@ export const MyPools = ({ onPoolClick, onCreatePool }: MyPoolsProps) => {
               >
                 Criar Bolão
               </Button>
+              {onEnterWithInvite && (
+                <Button
+                  onClick={onEnterWithInvite}
+                  variant="outline"
+                  className="border-2 border-blue-500 text-blue-600 hover:bg-blue-50 font-semibold rounded-xl"
+                >
+                  <Link2 className="w-4 h-4 mr-2" />
+                  Entrar com convite
+                </Button>
+              )}
               <Button
                 onClick={() =>
                   document.getElementById('featured-pools')?.scrollIntoView({ behavior: 'smooth' })

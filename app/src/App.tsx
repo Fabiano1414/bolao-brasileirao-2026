@@ -18,6 +18,7 @@ import { PoolDetailsModal } from '@/components/modals/PoolDetailsModal';
 import { ProfileModal } from '@/components/modals/ProfileModal';
 import { AllMatchesModal } from '@/components/modals/AllMatchesModal';
 import { AdminModal } from '@/components/modals/AdminModal';
+import { EnterWithInviteModal } from '@/components/modals/EnterWithInviteModal';
 import type { Pool } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -46,25 +47,28 @@ function AppContent() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [enterInviteOpen, setEnterInviteOpen] = useState(false);
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined);
+  const [pendingInvite, setPendingInvite] = useState<{ poolId: string; code?: string } | null>(null);
 
   /** Abre o modal do bolão ao chegar com link de convite (?pool=ID&code=XXX).
    * Reage a mudanças em pools para quando os dados vêm do Firestore (carregamento assíncrono). */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const poolId = params.get('pool');
-    const code = params.get('code') ?? undefined;
+    const poolId = params.get('pool') ?? pendingInvite?.poolId;
+    const code = params.get('code') ?? pendingInvite?.code ?? undefined;
     if (poolId) {
       const pool = pools.find(p => p.id === poolId);
       if (pool) {
         setSelectedPool(pool);
         setInviteCode(code);
         setPoolDetailsOpen(true);
+        setPendingInvite(null);
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-  }, [pools]);
+  }, [pools, pendingInvite]);
 
   /** Acesso admin via URL: ?admin=1 — faça login e acesse /?admin=1 */
   useEffect(() => {
@@ -121,10 +125,23 @@ function AppContent() {
     setAdminOpen(true);
   };
 
+  const handleEnterWithInvite = (poolId: string, code?: string): boolean => {
+    const pool = getPool(poolId);
+    if (pool) {
+      setSelectedPool(pool);
+      setInviteCode(code);
+      setPoolDetailsOpen(true);
+      return true;
+    }
+    setPendingInvite({ poolId, code });
+    return false;
+  };
+
   return (
     <div className="min-h-screen bg-white" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
       <Navigation
         onCreatePool={handleCreatePool}
+        onEnterWithInvite={() => setEnterInviteOpen(true)}
         onViewPools={handleViewPools}
         onViewMatches={handleViewMatches}
         onViewProfile={handleViewProfile}
@@ -138,6 +155,7 @@ function AppContent() {
         <MyPools
           onPoolClick={handlePoolClick}
           onCreatePool={handleCreatePool}
+          onEnterWithInvite={() => setEnterInviteOpen(true)}
         />
 
         <div id="featured-pools">
@@ -145,6 +163,7 @@ function AppContent() {
             pools={getPublicPoolsList()}
             onPoolClick={handlePoolClick}
             onViewAll={handleViewPools}
+            onEnterWithInvite={() => setEnterInviteOpen(true)}
           />
         </div>
         
@@ -183,6 +202,12 @@ function AppContent() {
           setInviteCode(undefined);
         }}
         initialJoinCode={inviteCode}
+      />
+
+      <EnterWithInviteModal
+        isOpen={enterInviteOpen}
+        onClose={() => setEnterInviteOpen(false)}
+        onEnter={handleEnterWithInvite}
       />
 
       <ProfileModal

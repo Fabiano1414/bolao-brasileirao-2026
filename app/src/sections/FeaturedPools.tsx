@@ -2,16 +2,17 @@ import { useRef } from 'react';
 import { PoolCard } from '@/components/ui/custom/PoolCard';
 import type { Pool } from '@/types';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Flame } from 'lucide-react';
+import { ArrowRight, Flame, Link2 } from 'lucide-react';
 import { useInView } from '@/hooks/useInView';
 
 interface FeaturedPoolsProps {
   pools: Pool[];
   onPoolClick: (poolId: string) => void;
   onViewAll: () => void;
+  onEnterWithInvite?: () => void;
 }
 
-export const FeaturedPools = ({ pools, onPoolClick, onViewAll }: FeaturedPoolsProps) => {
+export const FeaturedPools = ({ pools, onPoolClick, onViewAll, onEnterWithInvite }: FeaturedPoolsProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: '-100px' });
 
@@ -66,6 +67,16 @@ export const FeaturedPools = ({ pools, onPoolClick, onViewAll }: FeaturedPoolsPr
               <p className="text-gray-400 text-sm mt-2">
                 Bolões públicos aparecerão aqui quando forem criados.
               </p>
+              {onEnterWithInvite && (
+                <Button
+                  onClick={onEnterWithInvite}
+                  variant="outline"
+                  className="mt-6 border-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+                >
+                  <Link2 className="w-4 h-4 mr-2" />
+                  Recebeu um convite? Entre com o link
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -6,6 +6,7 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface NavigationProps {
   onCreatePool: () => void;
+  onEnterWithInvite?: () => void;
   onViewPools: () => void;
   onViewMatches: () => void;
   onViewProfile: () => void;
@@ -15,6 +16,7 @@ interface NavigationProps {
 
 export const Navigation = ({
   onCreatePool,
+  onEnterWithInvite,
   onViewPools,
   onViewMatches,
   onViewProfile,
@@ -46,6 +48,9 @@ export const Navigation = ({
   ];
   if (user) {
     navLinks.splice(1, 0, { label: 'Meus Bolões', onClick: onViewMyPools });
+  }
+  if (onEnterWithInvite) {
+    navLinks.push({ label: 'Entrar com convite', onClick: onEnterWithInvite });
   }
   if (isAdmin && onViewAdmin) {
     navLinks.push({ label: 'Admin', onClick: onViewAdmin });
