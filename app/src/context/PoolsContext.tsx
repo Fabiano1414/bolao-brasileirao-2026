@@ -173,7 +173,7 @@ function getInitialPoolsLocal(): Pool[] {
 }
 
 export function PoolsProvider({ children }: { children: ReactNode }) {
-  const { useFirebase } = useAuth();
+  const { useFirebase, user } = useAuth();
   const { getUpcomingMatches, matches, getMatchById, isLoading: matchesLoading } = useMatchesContext();
 
   const [pools, setPools] = useState<Pool[]>(() =>
@@ -187,9 +187,16 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   );
   const [isLoading, setIsLoading] = useState(false);
 
-  // Firestore: real-time subscriptions
+  // Firestore: real-time subscriptions — só quando usuário autenticado (regras exigem request.auth)
   useEffect(() => {
-    if (!useFirebase) return;
+    if (!useFirebase || !user) {
+      if (useFirebase && !user) {
+        setPools([]);
+        setPredictions([]);
+        setMatchResults({});
+      }
+      return;
+    }
     const addMatches = (pool: Pool) => ({ ...pool, matches: getUpcomingMatches(10) });
     const onPools = (pools: Pool[]) => setPools(pools.filter(p => !isLegacyMockPool(p)));
     const unsubPools = firestoreSubscribePools(addMatches, onPools);
@@ -200,7 +207,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       unsubPreds();
       unsubResults();
     };
-  }, [useFirebase, getUpcomingMatches]);
+  }, [useFirebase, user, getUpcomingMatches]);
 
   useEffect(() => {
     if (useFirebase) return;

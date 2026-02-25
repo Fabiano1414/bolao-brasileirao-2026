@@ -112,6 +112,14 @@ function fromFirestorePrediction(id: string, data: Record<string, unknown>): Pre
   };
 }
 
+function onSnapshotError(collection: string) {
+  return (err: unknown) => {
+    if (import.meta.env.DEV) {
+      console.warn(`[Firestore] Erro em ${collection}:`, err);
+    }
+  };
+}
+
 export function subscribePools(
   addMatches: (pool: Pool) => Pool,
   onPools: (pools: Pool[]) => void
@@ -119,31 +127,43 @@ export function subscribePools(
   const db = getFirebaseDb();
   if (!db) return () => {};
 
-  return onSnapshot(collection(db, POOLS_COLLECTION), (snapshot) => {
-    const pools: Pool[] = snapshot.docs.map((d) => addMatches(fromFirestorePool(d.id, d.data())));
-    onPools(pools);
-  });
+  return onSnapshot(
+    collection(db, POOLS_COLLECTION),
+    (snapshot) => {
+      const pools: Pool[] = snapshot.docs.map((d) => addMatches(fromFirestorePool(d.id, d.data())));
+      onPools(pools);
+    },
+    onSnapshotError('pools')
+  );
 }
 
 export function subscribePredictions(onPredictions: (predictions: Prediction[]) => void): () => void {
   const db = getFirebaseDb();
   if (!db) return () => {};
 
-  return onSnapshot(collection(db, PREDICTIONS_COLLECTION), (snapshot) => {
-    const predictions = snapshot.docs.map((d) => fromFirestorePrediction(d.id, d.data()));
-    onPredictions(predictions);
-  });
+  return onSnapshot(
+    collection(db, PREDICTIONS_COLLECTION),
+    (snapshot) => {
+      const predictions = snapshot.docs.map((d) => fromFirestorePrediction(d.id, d.data()));
+      onPredictions(predictions);
+    },
+    onSnapshotError('predictions')
+  );
 }
 
 export function subscribeMatchResults(onResults: (results: Record<string, MatchResult>) => void): () => void {
   const db = getFirebaseDb();
   if (!db) return () => {};
 
-  return onSnapshot(doc(db, MATCH_RESULTS_DOC), (snapshot) => {
-    const data = snapshot.data();
-    const results = (data?.results as Record<string, { homeScore: number; awayScore: number }>) ?? {};
-    onResults(results);
-  });
+  return onSnapshot(
+    doc(db, MATCH_RESULTS_DOC),
+    (snapshot) => {
+      const data = snapshot.data();
+      const results = (data?.results as Record<string, { homeScore: number; awayScore: number }>) ?? {};
+      onResults(results);
+    },
+    onSnapshotError('matchResults')
+  );
 }
 
 export async function createPoolInFirestore(pool: Pool): Promise<void> {
