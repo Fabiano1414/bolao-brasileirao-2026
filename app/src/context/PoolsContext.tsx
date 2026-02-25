@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { Pool, Prediction, User } from '@/types';
 import { initialPools } from '@/data/pools';
 import { useMatchesContext } from '@/context/MatchesContext';
@@ -189,6 +189,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     isFirebaseConfigured() ? {} : loadMatchResultsFromStorage()
   );
   const [isLoading, setIsLoading] = useState(false);
+  const notifyOtherTabsRef = useRef<() => void>(() => {});
 
   // Firestore: real-time subscriptions — só quando usuário autenticado (regras exigem request.auth)
   useEffect(() => {
@@ -206,9 +207,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     const unsubPreds = firestoreSubscribePredictions(setPredictions);
     const unsubResults = firestoreSubscribeMatchResults(setMatchResults);
 
-    /** Fallback: quando usuário volta à aba ou a cada 30s — garante que novos bolões apareçam */
     const syncFromFirestore = async () => {
-      if (document.visibilityState !== 'visible') return;
       try {
         const [p, preds, results] = await Promise.all([
           firestoreFetchPoolsOnce(addMatches),
@@ -224,7 +223,15 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     };
     const onVisible = () => void syncFromFirestore();
     document.addEventListener('visibilitychange', onVisible);
-    const interval = setInterval(syncFromFirestore, 30_000);
+    const interval = setInterval(syncFromFirestore, 15_000);
+
+    const channel =
+      typeof BroadcastChannel !== 'undefined'
+        ? new BroadcastChannel('bolao-brasileirao-sync')
+        : null;
+    const onChannelMessage = () => void syncFromFirestore();
+    channel?.addEventListener('message', onChannelMessage);
+    notifyOtherTabsRef.current = () => channel?.postMessage('sync');
 
     return () => {
       unsubPools();
@@ -232,6 +239,8 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       unsubResults();
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(interval);
+      channel?.removeEventListener('message', onChannelMessage);
+      notifyOtherTabsRef.current = () => {};
     };
   }, [useFirebase, user, getUpcomingMatches]);
 
@@ -249,6 +258,47 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (useFirebase) return;
     savePoolsToStorage(pools);
   }, [useFirebase, pools]);
+
+  // localStorage: sincronizar quando outra aba altera os dados
+  useEffect(() => {
+    if (useFirebase) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === POOLS_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue, reviveDate);
+          const raw = Array.isArray(parsed) ? parsed : [];
+          setPools(raw.filter((p: Pool) => !isLegacyMockPool(p)));
+        } catch {
+          // ignore
+        }
+      } else if (e.key === PREDICTIONS_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setPredictions(
+            Array.isArray(parsed)
+              ? parsed.map((p: Prediction & { createdAt: string }) => ({
+                  ...p,
+                  createdAt: new Date(p.createdAt),
+                }))
+              : []
+          );
+        } catch {
+          // ignore
+        }
+      } else if (e.key === MATCH_RESULTS_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setMatchResults(
+            typeof parsed === 'object' && parsed !== null ? parsed : {}
+          );
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [useFirebase]);
 
   const getMatchResult = useCallback((matchId: string) => matchResults[matchId], [matchResults]);
 
@@ -331,7 +381,8 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (useFirebase) {
       try {
         await createPoolInFirestore(newPool);
-        setPools(prev => [newPool, ...prev]); // otimista até subscription atualizar
+        setPools(prev => [newPool, ...prev]);
+        notifyOtherTabsRef.current();
       } catch (e) {
         if (import.meta.env.DEV) console.warn('[Pools] createPool Firestore error:', e);
         throw e;
@@ -360,7 +411,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
         isPrivate: base.isPrivate,
         code: base.code,
       };
-      updatePoolInFirestore(poolId, firestoreUpdates).catch(e => import.meta.env.DEV && console.warn('[Pools] updatePool Firestore:', e));
+      updatePoolInFirestore(poolId, firestoreUpdates).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   };
@@ -398,6 +449,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       if (useFirebase) {
         try {
           await updatePoolMembersInFirestore(poolId, newMembers);
+          notifyOtherTabsRef.current();
         } catch (e) {
           if (import.meta.env.DEV) console.warn('[Pools] joinPool Firestore:', e);
           setPools(prev => prev.map(p => (p.id === poolId ? { ...p, members: pool.members } : p)));
@@ -425,8 +477,10 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     setPredictions(prev => prev.filter(p => !(p.poolId === poolId && p.userId === userId)));
 
     if (useFirebase) {
-      updatePoolMembersInFirestore(poolId, updatedMembers).catch(() => {});
-      deletePredictionsByUserAndPool(poolId, userId).catch(() => {});
+      Promise.all([
+        updatePoolMembersInFirestore(poolId, updatedMembers),
+        deletePredictionsByUserAndPool(poolId, userId),
+      ]).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   };
@@ -438,7 +492,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     setPools(prev => prev.filter(p => p.id !== poolId));
     setPredictions(prev => prev.filter(p => p.poolId !== poolId));
     if (useFirebase) {
-      deletePoolInFirestore(poolId).catch(e => import.meta.env.DEV && console.warn('[Pools] deletePool Firestore:', e));
+      deletePoolInFirestore(poolId).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   };
@@ -449,7 +503,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     setPools(prev => prev.filter(p => p.id !== poolId));
     setPredictions(prev => prev.filter(p => p.poolId !== poolId));
     if (useFirebase) {
-      deletePoolInFirestore(poolId).catch(e => import.meta.env.DEV && console.warn('[Pools] adminDeletePool Firestore:', e));
+      deletePoolInFirestore(poolId).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   };
@@ -464,7 +518,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (updates.isPrivate === false) base.code = undefined;
     setPools(prev => prev.map(p => (p.id !== poolId ? p : base)));
     if (useFirebase) {
-      updatePoolInFirestore(poolId, base).catch(e => import.meta.env.DEV && console.warn('[Pools] adminUpdatePool Firestore:', e));
+      updatePoolInFirestore(poolId, base).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   }, [pools, useFirebase]);
@@ -484,11 +538,11 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (useFirebase) {
       updatedPools.forEach(pool => {
         if (pool.ownerId === userId) {
-          updatePoolInFirestore(pool.id, { owner: pool.owner }).catch(() => {});
+          updatePoolInFirestore(pool.id, { owner: pool.owner }).finally(() => notifyOtherTabsRef.current());
         }
         const hasMember = pool.members.some(m => m.userId === userId);
         if (hasMember) {
-          updatePoolMembersInFirestore(pool.id, pool.members).catch(() => {});
+          updatePoolMembersInFirestore(pool.id, pool.members).finally(() => notifyOtherTabsRef.current());
         }
       });
     }
@@ -497,16 +551,19 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   const adminDeleteUserData = useCallback((userId: string) => {
     setPools(prev => {
       if (useFirebase) {
-        prev.forEach(pool => {
-          if (pool.ownerId === userId) {
-            deletePoolInFirestore(pool.id).catch(() => {});
-          } else if (pool.members.some(m => m.userId === userId)) {
+        const promises = prev.flatMap(pool => {
+          if (pool.ownerId === userId) return [deletePoolInFirestore(pool.id)];
+          if (pool.members.some(m => m.userId === userId)) {
             const newMembers = pool.members.filter(m => m.userId !== userId);
             const sorted = [...newMembers].sort((a, b) => b.points - a.points);
-            updatePoolMembersInFirestore(pool.id, sorted.map((m, i) => ({ ...m, rank: i + 1 }))).catch(() => {});
-            deletePredictionsByUserAndPool(pool.id, userId).catch(() => {});
+            return [
+              updatePoolMembersInFirestore(pool.id, sorted.map((m, i) => ({ ...m, rank: i + 1 }))),
+              deletePredictionsByUserAndPool(pool.id, userId),
+            ];
           }
+          return [];
         });
+        Promise.all(promises).finally(() => notifyOtherTabsRef.current());
       }
       return prev
         .filter(p => p.ownerId !== userId)
@@ -526,8 +583,10 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     ));
     setPredictions(prev => prev.filter(p => !(p.poolId === poolId && p.userId === userId)));
     if (useFirebase) {
-      updatePoolMembersInFirestore(poolId, updatedMembers).catch(() => {});
-      deletePredictionsByUserAndPool(poolId, userId).catch(() => {});
+      Promise.all([
+        updatePoolMembersInFirestore(poolId, updatedMembers),
+        deletePredictionsByUserAndPool(poolId, userId),
+      ]).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   }, [pools, useFirebase]);
@@ -537,7 +596,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (!pred) return false;
     setPredictions(prev => prev.filter(p => p.id !== predictionId));
     if (useFirebase) {
-      deletePredictionInFirestore(predictionId).catch(() => {});
+      deletePredictionInFirestore(predictionId).finally(() => notifyOtherTabsRef.current());
     }
     return true;
   }, [predictions, useFirebase]);
@@ -582,7 +641,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       return [...filtered, newPred];
     });
     if (useFirebase) {
-      savePredictionInFirestore(newPred).catch(e => import.meta.env.DEV && console.warn('[Pools] savePrediction Firestore:', e));
+      savePredictionInFirestore(newPred).finally(() => notifyOtherTabsRef.current());
     }
   }, [getMatchById, useFirebase]);
 
@@ -594,7 +653,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   const setMatchResult = useCallback((matchId: string, homeScore: number, awayScore: number) => {
     setMatchResults(prev => ({ ...prev, [matchId]: { homeScore, awayScore } }));
     if (useFirebase) {
-      setMatchResultInFirestore(matchId, homeScore, awayScore).catch(e => import.meta.env.DEV && console.warn('[Pools] setMatchResult Firestore:', e));
+      setMatchResultInFirestore(matchId, homeScore, awayScore).finally(() => notifyOtherTabsRef.current());
     }
   }, [useFirebase]);
 
@@ -610,6 +669,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     if (useFirebase) {
       try {
         await setMatchResultsBatchInFirestore(newResults);
+        notifyOtherTabsRef.current();
       } catch (e) {
         if (import.meta.env.DEV) console.warn('[Pools] syncResultsFromApi Firestore:', e);
       }
