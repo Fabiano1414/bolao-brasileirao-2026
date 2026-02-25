@@ -37,11 +37,13 @@ app
 
 ---
 
-## Variáveis de ambiente (produção) — **OBRIGATÓRIO PARA DADOS ENTRE NAVEGADORES**
+## Variáveis de ambiente (produção) — **OBRIGATÓRIO PARA DADOS COMPARTILHADOS**
 
-Sem o Firebase configurado na Vercel, o app usa **localStorage** — os dados ficam só no navegador onde foram criados. Em outro navegador ou dispositivo, aparece vazio.
+Sem o Firebase configurado na Vercel, o app usa **localStorage** — cada aba, janela anônima ou dispositivo vê dados **isolados**. Bolões criados por um usuário não aparecem para outros.
 
 **Como corrigir:** Vercel → seu projeto → **Settings** → **Environment Variables**
+
+⚠️ **Marque o ambiente "Production"** ao adicionar cada variável. Se marcar apenas Preview, o deploy de produção continuará sem Firebase.
 
 Adicione todas estas variáveis (copie do seu `.env` local):
 
@@ -55,7 +57,9 @@ Adicione todas estas variáveis (copie do seu `.env` local):
 | `VITE_FIREBASE_APP_ID` | `1:123456789:web:...` |
 | `VITE_FIREBASE_VAPID_KEY` | *(opcional, para push)* |
 
-**Depois de salvar**, faça um novo deploy (ou aguarde o automático).
+**Depois de salvar**, faça um novo deploy: **Deployments** → ⋮ no último deploy → **Redeploy**.
+
+**Como verificar:** Após o deploy, se aparecer o banner amarelo "Modo local" no topo do app, as variáveis não foram carregadas — confira o ambiente Production e redeploy.
 
 ---
 

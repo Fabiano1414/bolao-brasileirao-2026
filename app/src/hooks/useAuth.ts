@@ -42,11 +42,19 @@ function toUser(stored: StoredUser): User {
 
 export type ResetPasswordResult = 'ok' | 'email_sent' | 'not_found' | 'error';
 
+export type RegisterResult =
+  | 'ok'
+  | { error: 'email_in_use'; rawCode?: string }
+  | { error: 'weak_password'; rawCode?: string }
+  | { error: 'invalid_email'; rawCode?: string }
+  | { error: 'operation_not_allowed'; rawCode?: string }
+  | { error: 'unknown'; code: string };
+
 interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<'ok' | 'not_found' | 'wrong_password'>;
-  register: (name: string, email: string, password: string, avatarDataUrl?: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, avatarDataUrl?: string) => Promise<RegisterResult>;
   resetPassword: (email: string, newPassword?: string) => Promise<ResetPasswordResult>;
   updateUser: (updates: Partial<User>) => void;
   logout: () => void;
@@ -175,7 +183,7 @@ export function AuthProvider(props: { children: ReactNode }) {
   }, [useFirebase]);
 
   const register = useCallback(
-    async (name: string, email: string, password: string, avatarDataUrl?: string): Promise<boolean> => {
+    async (name: string, email: string, password: string, avatarDataUrl?: string): Promise<RegisterResult> => {
       setIsLoading(true);
       try {
         if (useFirebase) {
@@ -183,27 +191,33 @@ export function AuthProvider(props: { children: ReactNode }) {
           if (fbUser) {
             setUser(fbUser);
             setIsLoading(false);
-            return true;
+            return 'ok';
           }
           setIsLoading(false);
-          return false;
+          return { error: 'unknown', code: 'firebase_not_configured' };
         }
       } catch (e: unknown) {
         const code = (e as { code?: string })?.code ?? '';
         const msg = String(e instanceof Error ? e.message : e);
+        const rawCode = code || msg || 'unknown';
+        const codeOrMsg = rawCode.toLowerCase();
         if (import.meta.env.DEV) {
-          console.warn('[Auth] Register error:', code || msg, e);
-          (window as { __lastAuthError?: string }).__lastAuthError = code || msg;
+          console.warn('[Auth] Register error:', rawCode, e);
+          (window as { __lastAuthError?: string }).__lastAuthError = rawCode;
         }
         setIsLoading(false);
-        return false;
+        if (/email-already-in-use/i.test(codeOrMsg)) return { error: 'email_in_use', rawCode };
+        if (/weak-password|password-too-short/i.test(codeOrMsg)) return { error: 'weak_password', rawCode };
+        if (/invalid-email|invalid-email-address/i.test(codeOrMsg)) return { error: 'invalid_email', rawCode };
+        if (/operation-not-allowed/i.test(codeOrMsg)) return { error: 'operation_not_allowed', rawCode };
+        return { error: 'unknown', code: rawCode };
       }
 
       await new Promise((resolve) => setTimeout(resolve, 600));
 
       if (findStoredUserByEmail(email)) {
         setIsLoading(false);
-        return false;
+        return { error: 'email_in_use', rawCode: 'local_storage' };
       }
 
       const { hash, salt } = await hashPassword(password);
@@ -226,7 +240,7 @@ export function AuthProvider(props: { children: ReactNode }) {
       setUser(userData);
       localStorage.setItem('bolao_user', JSON.stringify(userData));
       setIsLoading(false);
-      return true;
+      return 'ok';
     },
     [useFirebase]
   );

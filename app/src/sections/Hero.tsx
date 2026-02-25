@@ -95,19 +95,43 @@ export const Hero = ({ onCreatePool, onViewPools, onViewAdmin }: HeroProps) => {
 
   const handleRegister = async (data: RegisterFormData) => {
     setIsRegisterLoading(true);
-    const ok = await register(data.name, data.email, data.password, registerPhoto || undefined);
+    const result = await register(data.name, data.email, data.password, registerPhoto || undefined);
     setIsRegisterLoading(false);
-    if (ok) {
+    if (result === 'ok') {
       setRegisterPhoto(null);
       registerForm.reset();
       toast.success('Conta criada!', { description: 'Você já está logado. Bem-vindo!' });
     } else {
-      const lastErr = import.meta.env.DEV && (window as { __lastAuthError?: string }).__lastAuthError;
-      toast.error('Não foi possível criar a conta', {
-        description: lastErr
-          ? `Erro: ${lastErr}. Verifique o .env e FIREBASE_ERROS_COMUNS.md`
-          : 'O email pode já estar em uso. Use outro ou tente fazer login na aba "Entrar".',
-      });
+      const err = result.error;
+      const rawCode = 'rawCode' in result ? result.rawCode : 'code' in result ? result.code : undefined;
+      const codePrefix = rawCode ? `[${rawCode}] ` : '';
+      const messages: Record<string, { title: string; description: string }> = {
+        email_in_use: {
+          title: 'Não foi possível criar a conta',
+          description:
+            rawCode === 'local_storage'
+              ? `${codePrefix}Email já no sistema (modo local). Limpe F12 → Application → Local Storage ou use janela anônima.`
+              : `${codePrefix}Email pode já estar cadastrado. Use outro ou faça login na aba "Entrar".`,
+        },
+        weak_password: {
+          title: 'Senha fraca',
+          description: `${codePrefix}Use pelo menos 6 caracteres.`,
+        },
+        invalid_email: {
+          title: 'Email inválido',
+          description: `${codePrefix}Verifique o formato do email.`,
+        },
+        operation_not_allowed: {
+          title: 'Cadastro desabilitado',
+          description: `${codePrefix}Habilite Firebase Console > Autenticação > Método de login > Email/Senha.`,
+        },
+        unknown: {
+          title: 'Não foi possível criar a conta',
+          description: `${codePrefix || `[${rawCode ?? 'unknown'}] `}Verifique a configuração do Firebase.`,
+        },
+      };
+      const { title, description } = messages[err] ?? messages.unknown;
+      toast.error(title, { description });
     }
   };
 

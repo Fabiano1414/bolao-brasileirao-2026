@@ -24,7 +24,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
 function AppContent() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, useFirebase } = useAuth();
   const { getPool, getPublicPoolsList, pools } = usePoolsContext();
   const { needRefresh, updateServiceWorker } = useRegisterSW();
   const updateToastShown = useRef(false);
@@ -148,6 +148,12 @@ function AppContent() {
         onViewMyPools={handleViewMyPools}
         onViewAdmin={handleViewAdmin}
       />
+
+      {!useFirebase && (
+        <div className="sticky top-0 z-30 bg-amber-500 text-amber-950 px-4 py-2.5 text-center text-sm font-medium shadow-md">
+          <span className="font-semibold">Modo local:</span> Os dados ficam só neste navegador — cada aba ou janela anônima vê dados isolados. Para compartilhar bolões entre todos os usuários, configure o Firebase na Vercel (Settings → Environment Variables).
+        </div>
+      )}
 
       <main>
         <Hero onCreatePool={handleCreatePool} onViewPools={handleViewPools} onViewAdmin={handleViewAdmin} />
