@@ -11,7 +11,7 @@ App React + Vite + TypeScript para bolões do Campeonato Brasileiro Série A 202
 - **Bolões**: criar, entrar (código), sair, excluir
 - **Palpites**: salvar por jogo e bolão
 - **Resultados**: manual e via API (TheSportsDB)
-- **Ranking**: cálculo de pontos (5 exato, 3 resultado)
+- **Ranking**: cálculo de pontos (3 exato, 1 resultado)
 - **Jogos**: estáticos (rodadas 1–4) + API (rodadas 5+)
 - **Cache**: jogos em `localStorage` para carregamento mais rápido
 - **Perfil**: nome, foto, dados básicos
@@ -23,24 +23,24 @@ App React + Vite + TypeScript para bolões do Campeonato Brasileiro Série A 202
 
 ### Alta prioridade
 
-| Item | Descrição |
-|------|-----------|
-| **1. Autenticação real** | Login ignora senha; registro cria usuário local. Falta backend (Firebase, Supabase, Auth0) e validação de credenciais. |
-| **2. Perfil — stats reais** | `ProfileModal` usa `leaderboard` estático de `pools.ts`. Deveria usar `getGlobalLeaderboard()` do `PoolsContext`. |
-| **3. Perfil — histórico real** | Histórico de palpites está fixo (Palmeiras 2x1, etc.). Deveria listar palpites reais do usuário com pontos ganhos. |
-| **4. Perfil — conquistas dinâmicas** | Badges fixos. Deveria desbloquear conforme feitos (1º lugar, 10 placares exatos, etc.). |
-| **5. Backend** | Tudo em `localStorage`. Para produção é necessário backend (API) para bolões, usuários, palpites. |
+| Item | Descrição | Status |
+|------|-----------|--------|
+| **1. Autenticação real** | Backend (Firebase, Supabase, Auth0) para credenciais reais. Hash de senha local já implementado. | Pendente |
+| **2. Perfil — stats reais** | Usa `getGlobalLeaderboard()` do `PoolsContext`. | ✅ Feito |
+| **3. Perfil — histórico real** | Usa `getUserPredictionHistory()` com palpites e pontos reais. | ✅ Feito |
+| **4. Perfil — conquistas dinâmicas** | Badges desbloqueiam conforme feitos (1º lugar, 10 placares exatos, campeão, iniciante). | ✅ Feito |
+| **5. Backend** | Tudo em `localStorage`. Para produção é necessário backend (API) para bolões, usuários, palpites. | Pendente |
 
 ### Média prioridade
 
 | Item | Descrição |
 |------|-----------|
 | **6. Estatísticas reais** | Números (10K usuários, R$50K prêmios) são fixos. Deveriam vir de dados reais ou API. |
-| **7. "Ver Todos os Jogos"** | Hoje só faz scroll para a mesma seção. Falta tela/modal com calendário completo. |
-| **8. Validação de formulários** | Login/registro sem validação (email, senha forte). Usar Zod + react-hook-form. |
-| **9. Recuperação de senha** | Não implementado. |
+| **7. "Ver Todos os Jogos"** | `AllMatchesModal` existe. | ✅ Feito |
+| **8. Validação de formulários** | Zod + react-hook-form em login/registro. | ✅ Feito |
+| **9. Recuperação de senha** | Implementado no Hero (esqueci minha senha). | ✅ Feito |
 | **10. Gravatar** | `lib/gravatar.ts` existe mas não é usado. Avatar poderia cair back para Gravatar quando não houver foto. |
-| **11. Regra "5 min antes"** | Mencionada na UI, mas palpites ainda podem ser feitos após o jogo começar. |
+| **11. Regra "5 min antes"** | Bloqueia na UI e em `savePrediction` do PoolsContext. | ✅ Feito |
 | **12. Testes** | Sem testes unitários/integração no código do app. |
 
 ### Baixa prioridade
@@ -64,11 +64,11 @@ App React + Vite + TypeScript para bolões do Campeonato Brasileiro Série A 202
 | Jogos | `matches.ts` (rodadas 1–4) + TheSportsDB (5+) | Parcialmente real |
 | Resultados | TheSportsDB + manual | Parcialmente real |
 | Ranking | Calculado a partir de palpites + resultados | Real |
-| Leaderboard global | `leaderboard` estático em `pools.ts` | Usado só em ProfileModal; TopRanking usa `getGlobalLeaderboard()` |
-| Estatísticas da home | Valores fixos (10K, R$50K, etc.) | Mock |
+| Leaderboard global | `getGlobalLeaderboard()` no PoolsContext | Real |
+| Estatísticas da home | Usuários, bolões, participações reais de `pools`. | ✅ Real |
 | Testimonials | Array estático | Mock |
-| Histórico do perfil | Lista fixa de 3 jogos | Mock |
-| Conquistas | 3 badges estáticos | Mock |
+| Histórico do perfil | `getUserPredictionHistory()` | Real |
+| Conquistas | 4 badges dinâmicos (Iniciante, Campeão, Atirador, Líder) | Real |
 
 ---
 

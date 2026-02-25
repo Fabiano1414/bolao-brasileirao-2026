@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AuthProvider } from '@/hooks/useAuth';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { MatchesProvider } from '@/context/MatchesContext';
 import { PoolsProvider, usePoolsContext } from '@/context/PoolsContext';
 import { Navigation } from '@/sections/Navigation';
@@ -10,23 +10,25 @@ import { HowItWorks } from '@/sections/HowItWorks';
 import { NextMatches } from '@/sections/NextMatches';
 import { Statistics } from '@/sections/Statistics';
 import { TopRanking } from '@/sections/TopRanking';
-import { Testimonials } from '@/sections/Testimonials';
 import { CTA } from '@/sections/CTA';
 import { Footer } from '@/sections/Footer';
 import { CreatePoolModal } from '@/components/modals/CreatePoolModal';
 import { PoolDetailsModal } from '@/components/modals/PoolDetailsModal';
 import { ProfileModal } from '@/components/modals/ProfileModal';
 import { AllMatchesModal } from '@/components/modals/AllMatchesModal';
+import { AdminModal } from '@/components/modals/AdminModal';
 import type { Pool } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
 function AppContent() {
-  const { pools, getPool } = usePoolsContext();
+  const { isAdmin } = useAuth();
+  const { getPool, getPublicPoolsList } = usePoolsContext();
   const [createPoolOpen, setCreatePoolOpen] = useState(false);
   const [poolDetailsOpen, setPoolDetailsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [inviteCode, setInviteCode] = useState<string | undefined>(undefined);
 
@@ -46,6 +48,21 @@ function AppContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Acesso admin via URL: ?admin=1 — faça login e acesse /?admin=1 */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === '1') {
+      sessionStorage.setItem('admin_requested', '1');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+  useEffect(() => {
+    if (sessionStorage.getItem('admin_requested') === '1' && isAdmin) {
+      sessionStorage.removeItem('admin_requested');
+      setAdminOpen(true);
+    }
+  }, [isAdmin]);
 
   const handleCreatePool = () => {
     setCreatePoolOpen(true);
@@ -83,18 +100,23 @@ function AppContent() {
     document.getElementById('my-pools')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleViewAdmin = () => {
+    setAdminOpen(true);
+  };
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
       <Navigation
         onCreatePool={handleCreatePool}
         onViewPools={handleViewPools}
         onViewMatches={handleViewMatches}
         onViewProfile={handleViewProfile}
         onViewMyPools={handleViewMyPools}
+        onViewAdmin={handleViewAdmin}
       />
 
       <main>
-        <Hero onCreatePool={handleCreatePool} onViewPools={handleViewPools} />
+        <Hero onCreatePool={handleCreatePool} onViewPools={handleViewPools} onViewAdmin={handleViewAdmin} />
         
         <MyPools
           onPoolClick={handlePoolClick}
@@ -103,7 +125,7 @@ function AppContent() {
 
         <div id="featured-pools">
           <FeaturedPools 
-            pools={pools}
+            pools={getPublicPoolsList()}
             onPoolClick={handlePoolClick}
             onViewAll={handleViewPools}
           />
@@ -124,7 +146,6 @@ function AppContent() {
         <div id="statistics">
           <Statistics />
         </div>
-        <Testimonials />
         <CTA onCreatePool={handleCreatePool} />
       </main>
 
@@ -138,7 +159,7 @@ function AppContent() {
       />
 
       <PoolDetailsModal
-        pool={selectedPool}
+        pool={selectedPool ? getPool(selectedPool.id) ?? selectedPool : null}
         isOpen={poolDetailsOpen}
         onClose={() => {
           setPoolDetailsOpen(false);
@@ -150,12 +171,20 @@ function AppContent() {
       <ProfileModal
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
+        onOpenAdmin={handleViewAdmin}
       />
 
       <AllMatchesModal
         isOpen={allMatchesOpen}
         onClose={() => setAllMatchesOpen(false)}
       />
+
+      {isAdmin && (
+        <AdminModal
+          isOpen={adminOpen}
+          onClose={() => setAdminOpen(false)}
+        />
+      )}
 
       <Toaster position="top-center" />
     </div>

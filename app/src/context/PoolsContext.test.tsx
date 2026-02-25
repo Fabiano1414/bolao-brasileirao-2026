@@ -34,7 +34,7 @@ describe('PoolsContext', () => {
 
 describe('calculatePointsForPrediction', () => {
   it('POINTS_EXACT e POINTS_RESULT estão definidos', () => {
-    expect(POINTS_EXACT).toBe(5);
-    expect(POINTS_RESULT).toBe(3);
+    expect(POINTS_EXACT).toBe(3);
+    expect(POINTS_RESULT).toBe(1);
   });
 });

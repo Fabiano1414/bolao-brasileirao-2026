@@ -32,7 +32,8 @@ import {
   Share2,
   Crosshair,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 import type { Match, Pool } from '@/types';
 import { MatchCard } from '@/components/ui/custom/MatchCard';
@@ -127,15 +128,19 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isEditingPrize, setIsEditingPrize] = useState(false);
+  const [editedPrize, setEditedPrize] = useState('');
   const { user } = useAuth();
   const { getMatchesByRound, getCurrentRound } = useMatchesContext();
 
   useEffect(() => {
     if (isOpen) {
       setJoinCode(initialJoinCode ?? '');
+      setEditedPrize(pool?.prize ?? '');
+      setIsEditingPrize(false);
     }
-  }, [isOpen, initialJoinCode, pool?.id]);
-  const { joinPool, leavePool, deletePool, savePrediction, getUserPrediction, getMatchResult, setMatchResult, getPredictionPoints, syncResultsFromApi } = usePoolsContext();
+  }, [isOpen, initialJoinCode, pool?.id, pool?.prize]);
+  const { joinPool, leavePool, deletePool, updatePool, savePrediction, getUserPrediction, getMatchResult, setMatchResult, getPredictionPoints, syncResultsFromApi } = usePoolsContext();
   const getMemberStats = (userId: string) => {
     if (!pool) return { exactScores: 0, correctResults: 0 };
     let exact = 0, correct = 0;
@@ -233,7 +238,7 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <DialogTitle className="text-2xl font-bold">{pool.name}</DialogTitle>
                 <Badge variant={pool.isPrivate ? 'secondary' : 'default'}>
                   {pool.isPrivate ? (
@@ -242,13 +247,86 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
                     <><Unlock className="w-3 h-3 mr-1" /> Público</>
                   )}
                 </Badge>
+                {isOwner && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      if (user) {
+                        updatePool(pool.id, user.id, { isPrivate: !pool.isPrivate });
+                        toast.success(pool.isPrivate ? 'Bolão agora é público.' : 'Bolão agora é privado.');
+                      }
+                    }}
+                  >
+                    Tornar {pool.isPrivate ? 'público' : 'privado'}
+                  </Button>
+                )}
+                {(pool.predictionsPrivate ?? true) && (
+                  <Badge variant="outline" className="border-violet-200 text-violet-700 bg-violet-50">
+                    <ShieldCheck className="w-3 h-3 mr-1" /> Palpites privados
+                  </Badge>
+                )}
               </div>
               <p className="text-gray-500">{pool.description}</p>
             </div>
-            {pool.prize && (
-              <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-700 px-4 py-2 rounded-xl">
-                <Trophy className="w-5 h-5" />
-                <span className="font-bold">{pool.prize}</span>
+            {(pool.prize || isOwner) && (
+              <div className="bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-700 px-4 py-2 rounded-xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Trophy className="w-5 h-5 shrink-0" />
+                  {isOwner && isEditingPrize ? (
+                    <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                      <input
+                        type="text"
+                        value={editedPrize}
+                        onChange={(e) => setEditedPrize(e.target.value)}
+                        placeholder="Ex: R$ 1.000,00 ou 12 cervejas"
+                        className="flex-1 px-3 py-1.5 text-sm font-bold border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-400 bg-white"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (pool && user) {
+                            updatePool(pool.id, user.id, { prize: editedPrize.trim() || undefined });
+                            toast.success('Prêmio atualizado!');
+                            setIsEditingPrize(false);
+                          }
+                        }}
+                        className="bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        Salvar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditedPrize(pool?.prize ?? '');
+                          setIsEditingPrize(false);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="font-bold">{pool.prize || 'Clique no lápis para definir'}</span>
+                      {isOwner && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto text-orange-600 hover:bg-orange-200/50"
+                          onClick={() => {
+                            setEditedPrize(pool?.prize ?? '');
+                            setIsEditingPrize(true);
+                          }}
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -365,7 +443,7 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
 
           <TabsContent value="ranking" className="mt-4">
             <p className="text-sm text-gray-500 mb-4">
-              Top 10 do bolão — placar exato (5 pts) e resultado correto (3 pts)
+              Top 10 do bolão — placar exato (3 pts) e resultado correto (1 pt)
             </p>
             <div className="space-y-3">
               {sortedMembers.map((member, index) => {
@@ -443,6 +521,7 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
                     showPrediction={!!(user && isMember)}
                     userPrediction={userPred}
                     pointsEarned={pointsEarned}
+                    showPrivacyHint={pool.predictionsPrivate !== false}
                     onPredict={user && isMember
                       ? (matchId, homeScore, awayScore) => {
                           savePrediction(pool.id, user.id, matchId, homeScore, awayScore);
@@ -495,7 +574,7 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
                 Os resultados são buscados automaticamente da API. Você também pode definir manualmente.
               </p>
               <p className="text-xs text-gray-400 mb-4">
-                Regras: 5 pts placar exato | 3 pts resultado correto (vitória/empate)
+                Regras: 3 pts placar exato | 1 pt resultado correto (vitória/empate)
               </p>
               <Button
                 variant="outline"
@@ -509,8 +588,8 @@ export const PoolDetailsModal = ({ pool, isOpen, onClose, initialJoinCode }: Poo
                         ? `${count} resultado(s) atualizado(s) da API!`
                         : 'Nenhum resultado novo. Tente novamente mais tarde.'
                     );
-                  } catch {
-                    toast.error('Falha ao buscar resultados.');
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Falha ao buscar resultados.');
                   } finally {
                     setIsSyncing(false);
                   }

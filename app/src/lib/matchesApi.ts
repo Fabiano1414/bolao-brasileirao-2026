@@ -87,7 +87,7 @@ export async function fetchMatchesFromApi(): Promise<Match[]> {
   try {
     const url = `${API_BASE}/${API_KEY}/eventsseason.php?id=${LEAGUE_ID}&s=${SEASON}`;
     const res = await fetch(url);
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`API retornou ${res.status}`);
     const data = await res.json();
     const events: ApiEvent[] = Array.isArray(data?.events) ? data.events : [];
     const matches: Match[] = [];
@@ -100,7 +100,13 @@ export async function fetchMatchesFromApi(): Promise<Match[]> {
       const tB = (b.date instanceof Date ? b.date : new Date(b.date)).getTime();
       return tA - tB;
     });
-  } catch {
-    return [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+    const isNetwork = typeof navigator !== 'undefined' && !navigator.onLine;
+    const isFetchFail = /failed to fetch|network error|load failed/i.test(msg);
+    const friendlyMsg = isNetwork || isFetchFail
+      ? 'Sem conexão. Verifique sua internet e tente novamente.'
+      : `Falha ao buscar jogos: ${msg}`;
+    throw new Error(friendlyMsg);
   }
 }

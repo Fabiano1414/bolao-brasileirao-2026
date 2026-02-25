@@ -50,12 +50,12 @@ export const PoolCard = ({ pool, onClick, isOwner = false }: PoolCardProps) => {
           {pool.description}
         </p>
 
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Users className="w-4 h-4 text-blue-500" />
             <span>{pool.members.length} participantes</span>
           </div>
-          {pool.prize && (
+          {pool.prize && !pool.isPrivate && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Trophy className="w-4 h-4 text-yellow-500" />
               <span>{pool.prize}</span>

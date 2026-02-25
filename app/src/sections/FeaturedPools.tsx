@@ -54,13 +54,26 @@ export const FeaturedPools = ({ pools, onPoolClick, onViewAll }: FeaturedPoolsPr
         </div>
 
         <div
-          className={`grid md:grid-cols-2 lg:grid-cols-4 gap-6 transition-all duration-700 ${
+          className={`transition-all duration-700 ${
             isInView ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {pools.map((pool) => (
-            <PoolCard key={pool.id} pool={pool} onClick={() => onPoolClick(pool.id)} />
-          ))}
+          {pools.length === 0 ? (
+            <div className="py-16 px-8 bg-white/60 rounded-2xl border-2 border-dashed border-gray-200 text-center">
+              <p className="text-gray-500 text-lg">
+                Ainda não há bolões públicos. Crie o primeiro e compartilhe com seus amigos!
+              </p>
+              <p className="text-gray-400 text-sm mt-2">
+                Bolões públicos aparecerão aqui quando forem criados.
+              </p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {pools.map((pool) => (
+                <PoolCard key={pool.id} pool={pool} onClick={() => onPoolClick(pool.id)} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>

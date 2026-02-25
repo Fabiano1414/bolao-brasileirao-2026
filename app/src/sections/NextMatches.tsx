@@ -169,7 +169,7 @@ export const NextMatches = ({ onViewAll }: NextMatchesProps) => {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-white/80 font-medium">Fazer palpites no bolão:</span>
                 <Select value={effectivePoolId} onValueChange={setSelectedPoolId}>
-                  <SelectTrigger className="w-[280px] bg-white/10 border-white/20 text-white">
+                  <SelectTrigger className="w-full max-w-[280px] bg-white/10 border-white/20 text-white">
                     <Trophy className="w-4 h-4 mr-2 text-yellow-400" />
                     <SelectValue placeholder="Escolha um bolão" />
                   </SelectTrigger>
@@ -216,6 +216,7 @@ export const NextMatches = ({ onViewAll }: NextMatchesProps) => {
                   showPrediction={!!(user && hasPool)}
                   userPrediction={userPred}
                   pointsEarned={pointsEarned}
+                  showPrivacyHint={userPools.find(p => p.id === effectivePoolId)?.predictionsPrivate !== false}
                   onPredict={(matchId, homeScore, awayScore) => {
                     if (!user || !effectivePoolId) return;
                     savePrediction(effectivePoolId, user.id, matchId, homeScore, awayScore);

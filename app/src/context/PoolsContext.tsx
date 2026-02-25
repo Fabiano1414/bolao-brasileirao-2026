@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { Pool, Prediction, User } from '@/types';
-import { mockPools, getPoolById } from '@/data/pools';
+import { initialPools } from '@/data/pools';
 import { useMatchesContext } from '@/context/MatchesContext';
 
 const PREDICTIONS_STORAGE_KEY = 'bolao_predictions';
@@ -8,8 +8,8 @@ const MATCH_RESULTS_STORAGE_KEY = 'bolao_match_results';
 const POOLS_STORAGE_KEY = 'bolao_pools';
 
 /** Pontos: placar exato | resultado (vitória/empate) | errado */
-export const POINTS_EXACT = 5;
-export const POINTS_RESULT = 3;
+export const POINTS_EXACT = 3;
+export const POINTS_RESULT = 1;
 
 type MatchResult = { homeScore: number; awayScore: number };
 
@@ -17,6 +17,7 @@ interface PoolsContextType {
   pools: Pool[];
   isLoading: boolean;
   createPool: (poolData: Partial<Pool>) => Promise<Pool>;
+  updatePool: (poolId: string, userId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate'>>) => boolean;
   joinPool: (poolId: string, user: User, code?: string) => Promise<boolean>;
   leavePool: (poolId: string, userId: string) => boolean;
   deletePool: (poolId: string, userId: string) => boolean;
@@ -30,6 +31,13 @@ interface PoolsContextType {
   getMatchResult: (matchId: string) => MatchResult | undefined;
   syncResultsFromApi: () => Promise<{ count: number }>;
   getPredictionPoints: (poolId: string, userId: string, matchId: string) => number | undefined;
+  adminDeletePool: (poolId: string) => boolean;
+  adminUpdatePool: (poolId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate' | 'code'>>) => boolean;
+  adminUpdateMemberUser: (userId: string, updates: Partial<Pick<User, 'name' | 'avatar'>>) => void;
+  adminDeleteUserData: (userId: string) => void;
+  adminRemoveUserFromPool: (poolId: string, userId: string) => boolean;
+  adminDeletePrediction: (predictionId: string) => boolean;
+  adminGetAllPredictions: () => Prediction[];
   getGlobalLeaderboard: (limit?: number) => Array<{
     user: User;
     points: number;
@@ -96,12 +104,27 @@ function reviveDate(key: string, value: unknown): unknown {
   return value;
 }
 
+/** Nomes de bolões legados/mock que não devem ser exibidos (apenas bolões criados pelo usuário) */
+const LEGACY_MOCK_POOL_PATTERNS = [
+  /brazilian\s+national\s+league/i,
+  /liga\s+nacional(\s*[-–]\s*brasileir[aã]o)?/i,
+  /liga\s+nacional\s+brasileira/i,
+  /national\s+league\s+\d{4}/i,
+  /brazilian\s+(serie|série)\s+a\s+\d{4}/i,
+];
+
+function isLegacyMockPool(pool: Pool): boolean {
+  const name = (pool.name || '').trim();
+  return LEGACY_MOCK_POOL_PATTERNS.some((pattern) => pattern.test(name));
+}
+
 function loadPoolsFromStorage(): Pool[] {
   try {
     const stored = localStorage.getItem(POOLS_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored, reviveDate);
-      return Array.isArray(parsed) ? parsed : [];
+      const raw = Array.isArray(parsed) ? parsed : [];
+      return raw.filter((p: Pool) => !isLegacyMockPool(p));
     }
   } catch {
     // ignore
@@ -124,15 +147,15 @@ function calculatePointsForPrediction(
 }
 
 export function PoolsProvider({ children }: { children: ReactNode }) {
-  const { getUpcomingMatches, matches, getMatchById } = useMatchesContext();
+  const { getUpcomingMatches, matches, getMatchById, isLoading: matchesLoading } = useMatchesContext();
   const [pools, setPools] = useState<Pool[]>(() => {
     try {
       const loaded = loadPoolsFromStorage();
       if (Array.isArray(loaded) && loaded.length > 0) return loaded;
     } catch {
-      // dados corrompidos - usa mock
+      // dados corrompidos — começa vazio
     }
-    return mockPools;
+    return initialPools;
   });
   const [isLoading, setIsLoading] = useState(false);
   const [predictions, setPredictions] = useState<Prediction[]>(loadPredictionsFromStorage);
@@ -195,10 +218,13 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   }, [recalculateAllPools]);
 
   const createPool = async (poolData: Partial<Pool>): Promise<Pool> => {
+    const owner = poolData.owner;
+    if (!owner || !poolData.ownerId) {
+      throw new Error('É necessário estar logado para criar um bolão.');
+    }
+
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 800));
-
-    const owner = poolData.owner || mockPools[0].owner;
     const poolId = Date.now().toString();
     const newPool: Pool = {
       id: poolId,
@@ -217,6 +243,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
       }],
       matches: poolData.matches ?? getUpcomingMatches(10),
       isPrivate: poolData.isPrivate ?? true,
+      predictionsPrivate: poolData.predictionsPrivate ?? true,
       code: poolData.isPrivate ? Math.random().toString(36).substring(2, 10).toUpperCase() : undefined,
       createdAt: new Date(),
       endsAt: poolData.endsAt || new Date('2026-12-02'),
@@ -229,11 +256,28 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     return newPool;
   };
 
+  const updatePool = (poolId: string, userId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate'>>): boolean => {
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool || pool.ownerId !== userId) return false;
+    setPools(prev => prev.map(p => {
+      if (p.id !== poolId) return p;
+      const base = { ...p, ...updates };
+      if (updates.isPrivate === true && !base.code) {
+        return { ...base, code: Math.random().toString(36).substring(2, 10).toUpperCase() };
+      }
+      if (updates.isPrivate === false) {
+        return { ...base, code: undefined };
+      }
+      return base;
+    }));
+    return true;
+  };
+
   const joinPool = async (poolId: string, user: User, code?: string): Promise<boolean> => {
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 600));
 
-    const pool = pools.find(p => p.id === poolId) ?? getPoolById(poolId);
+    const pool = pools.find(p => p.id === poolId);
     if (!pool) {
       setIsLoading(false);
       return false;
@@ -293,8 +337,75 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const adminDeletePool = (poolId: string): boolean => {
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool) return false;
+    setPools(prev => prev.filter(p => p.id !== poolId));
+    setPredictions(prev => prev.filter(p => p.poolId !== poolId));
+    return true;
+  };
+
+  const adminUpdatePool = useCallback((poolId: string, updates: Partial<Pick<Pool, 'name' | 'description' | 'prize' | 'isPrivate' | 'code'>>): boolean => {
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool) return false;
+    setPools(prev => prev.map(p => {
+      if (p.id !== poolId) return p;
+      const base = { ...p, ...updates };
+      if (updates.isPrivate === true && !base.code) {
+        return { ...base, code: Math.random().toString(36).substring(2, 10).toUpperCase() };
+      }
+      if (updates.isPrivate === false) {
+        return { ...base, code: undefined };
+      }
+      return base;
+    }));
+    return true;
+  }, [pools]);
+
+  const adminUpdateMemberUser = useCallback((userId: string, updates: Partial<Pick<User, 'name' | 'avatar'>>) => {
+    setPools(prev => prev.map(pool => ({
+      ...pool,
+      owner: pool.ownerId === userId ? { ...pool.owner, ...updates } : pool.owner,
+      members: pool.members.map(m =>
+        m.userId === userId ? { ...m, user: { ...m.user, ...updates } } : m
+      )
+    })));
+  }, []);
+
+  const adminDeleteUserData = useCallback((userId: string) => {
+    setPools(prev => prev
+      .filter(p => p.ownerId !== userId)
+      .map(pool => ({
+        ...pool,
+        members: pool.members.filter(m => m.userId !== userId)
+      })));
+    setPredictions(prev => prev.filter(p => p.userId !== userId));
+  }, []);
+
+  const adminRemoveUserFromPool = useCallback((poolId: string, userId: string) => {
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool || pool.ownerId === userId) return false;
+    setPools(prev => prev.map(p => {
+      if (p.id !== poolId) return p;
+      const newMembers = p.members.filter(m => m.userId !== userId);
+      const sorted = [...newMembers].sort((a, b) => b.points - a.points);
+      return { ...p, members: sorted.map((m, i) => ({ ...m, rank: i + 1 })) };
+    }));
+    setPredictions(prev => prev.filter(p => !(p.poolId === poolId && p.userId === userId)));
+    return true;
+  }, [pools]);
+
+  const adminDeletePrediction = useCallback((predictionId: string) => {
+    const pred = predictions.find(p => p.id === predictionId);
+    if (!pred) return false;
+    setPredictions(prev => prev.filter(p => p.id !== predictionId));
+    return true;
+  }, [predictions]);
+
+  const adminGetAllPredictions = useCallback(() => predictions, [predictions]);
+
   const getPool = (id: string): Pool | undefined => {
-    return pools.find(p => p.id === id) ?? getPoolById(id);
+    return pools.find(p => p.id === id);
   };
 
   const getUserPoolsList = (userId: string): Pool[] => {
@@ -307,7 +418,16 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     return pools.filter(pool => !pool.isPrivate);
   };
 
+  const BET_CLOSE_MINUTES = 5;
+  const MS_PER_MINUTE = 60 * 1000;
+
   const savePrediction = useCallback((poolId: string, userId: string, matchId: string, homeScore: number, awayScore: number) => {
+    const match = getMatchById(matchId);
+    if (match) {
+      const matchDate = match.date instanceof Date ? match.date : new Date(match.date);
+      const cutoff = matchDate.getTime() - BET_CLOSE_MINUTES * MS_PER_MINUTE;
+      if (Date.now() >= cutoff) return; // Regra: não aceita palpite após 5 min antes do jogo
+    }
     setPredictions(prev => {
       const filtered = prev.filter(p => !(p.poolId === poolId && p.matchId === matchId && p.userId === userId));
       return [...filtered, {
@@ -320,7 +440,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
         createdAt: new Date()
       }];
     });
-  }, []);
+  }, [getMatchById]);
 
   const getUserPrediction = useCallback((poolId: string, userId: string, matchId: string) => {
     const p = predictions.find(x => x.poolId === poolId && x.matchId === matchId && x.userId === userId);
@@ -332,22 +452,39 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncResultsFromApi = useCallback(async (): Promise<{ count: number }> => {
-    try {
-      const { fetchMatchResultsFromApi } = await import('@/lib/matchResultsApi');
-      const results = await fetchMatchResultsFromApi(matches);
-      if (results.length === 0) return { count: 0 };
-      setMatchResults(prev => {
-        const next = { ...prev };
-        results.forEach(r => {
-          next[r.matchId] = { homeScore: r.homeScore, awayScore: r.awayScore };
-        });
-        return next;
+    const { fetchMatchResultsFromApi } = await import('@/lib/matchResultsApi');
+    const results = await fetchMatchResultsFromApi(matches);
+    if (results.length === 0) return { count: 0 };
+    setMatchResults(prev => {
+      const next = { ...prev };
+      results.forEach(r => {
+        next[r.matchId] = { homeScore: r.homeScore, awayScore: r.awayScore };
       });
-      return { count: results.length };
-    } catch {
-      return { count: 0 };
-    }
+      return next;
+    });
+    return { count: results.length };
   }, [matches]);
+
+  /** Sincronização automática de resultados: assim que jogos carregam e a cada 10 min.
+   * Resultados da API → matchResults → recalculateAllPools atualiza os pontos. */
+  useEffect(() => {
+    let cancelled = false;
+    const runSync = async () => {
+      if (cancelled) return;
+      try {
+        await syncResultsFromApi();
+      } catch {
+        // Silencioso: em auto-sync não mostramos toast
+      }
+    };
+    const t1 = setTimeout(runSync, matchesLoading ? 5000 : 1500); // 5s se carregando, 1.5s se já carregou
+    const interval = setInterval(runSync, 10 * 60 * 1000); // A cada 10 min
+    return () => {
+      cancelled = true;
+      clearTimeout(t1);
+      clearInterval(interval);
+    };
+  }, [syncResultsFromApi, matchesLoading]);
 
   const getPredictionPoints = useCallback(
     (poolId: string, userId: string, matchId: string) => {
@@ -437,6 +574,7 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     pools,
     isLoading,
     createPool,
+    updatePool,
     joinPool,
     leavePool,
     deletePool,
@@ -450,6 +588,13 @@ export function PoolsProvider({ children }: { children: ReactNode }) {
     getMatchResult,
     syncResultsFromApi,
     getPredictionPoints,
+    adminDeletePool,
+    adminUpdatePool,
+    adminUpdateMemberUser,
+    adminDeleteUserData,
+    adminRemoveUserFromPool,
+    adminDeletePrediction,
+    adminGetAllPredictions,
     getGlobalLeaderboard,
     getUserPredictionHistory
   };

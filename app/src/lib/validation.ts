@@ -19,5 +19,18 @@ export const registerSchema = z.object({
   password: z.string().min(6, { error: 'Senha deve ter pelo menos 6 caracteres' }),
 });
 
+export const resetPasswordSchema = z.object({
+  email: emailSchema,
+  newPassword: z.string().min(6, { error: 'Nova senha deve ter pelo menos 6 caracteres' }),
+  confirmPassword: z.string().min(1, { error: 'Confirme a senha' }),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'As senhas não coincidem',
+  path: ['confirmPassword'],
+});
+
+/** Apenas email — usado quando Firebase envia link de recuperação */
+export const resetPasswordEmailOnlySchema = z.object({ email: emailSchema });
+
 export type LoginFormData = z.infer<typeof loginSchema>;
 export type RegisterFormData = z.infer<typeof registerSchema>;
+export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;

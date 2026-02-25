@@ -53,6 +53,8 @@ export interface Pool {
   members: PoolMember[];
   matches: Match[];
   isPrivate: boolean;
+  /** Cada palpite é individual — ninguém vê o placar que outro apostou */
+  predictionsPrivate?: boolean;
   code?: string;
   createdAt: Date;
   endsAt: Date;

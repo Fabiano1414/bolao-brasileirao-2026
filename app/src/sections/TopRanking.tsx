@@ -11,7 +11,9 @@ export const TopRanking = () => {
 
   const topScorers = useMemo(() => getGlobalLeaderboard(10), [getGlobalLeaderboard]);
 
-  if (topScorers.length === 0) return null;
+  const hasMeaningfulRanking = topScorers.length > 0 && topScorers.some((e) => e.points > 0);
+
+  if (!hasMeaningfulRanking) return null;
 
   const podiumThree = topScorers.slice(0, 3);
 
@@ -127,11 +129,11 @@ export const TopRanking = () => {
                     <div className="text-sm text-gray-500 truncate">{entry.poolName}</div>
                   </div>
                   <div className="flex items-center gap-4 shrink-0">
-                      <div className="flex items-center gap-1.5" title="Placares exatos (5 pts)">
+                      <div className="flex items-center gap-1.5" title="Placares exatos (3 pts)">
                         <Crosshair className="w-4 h-4 text-green-600" />
                         <span className="text-sm font-semibold text-gray-700">{entry.exactScores}</span>
                       </div>
-                      <div className="flex items-center gap-1.5" title="Resultados corretos (3 ou 5 pts)">
+                      <div className="flex items-center gap-1.5" title="Resultados corretos (1 pt)">
                         <CheckCircle className="w-4 h-4 text-blue-600" />
                         <span className="text-sm font-semibold text-gray-700">{entry.correctResults}</span>
                       </div>

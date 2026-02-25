@@ -1,43 +1,58 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { AnimatedCounter } from '@/components/ui/custom/AnimatedCounter';
-import { Users, Trophy, Target, TrendingUp } from 'lucide-react';
+import { Users, Trophy, Target, Gift } from 'lucide-react';
 import { useInView } from '@/hooks/useInView';
-
-const stats = [
-  {
-    icon: Users,
-    value: 10000,
-    suffix: '+',
-    label: 'Usuários Ativos',
-    color: 'from-blue-500 to-blue-600'
-  },
-  {
-    icon: Trophy,
-    value: 50000,
-    prefix: 'R$ ',
-    label: 'Em Prêmios',
-    color: 'from-green-500 to-green-600',
-    glow: true
-  },
-  {
-    icon: Target,
-    value: 500,
-    suffix: '+',
-    label: 'Bolões Criados',
-    color: 'from-orange-500 to-orange-600'
-  },
-  {
-    icon: TrendingUp,
-    value: 99,
-    suffix: '%',
-    label: 'Satisfação',
-    color: 'from-purple-500 to-purple-600'
-  }
-];
+import { usePoolsContext } from '@/context/PoolsContext';
 
 export const Statistics = () => {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: '-100px' });
+  const { pools } = usePoolsContext();
+
+  const stats = useMemo(() => {
+    const uniqueUsers = new Set<string>();
+    let poolsWithPrize = 0;
+    pools.forEach(pool => {
+      pool.members.forEach(m => uniqueUsers.add(m.userId));
+      if (pool.prize && pool.prize.trim()) poolsWithPrize++;
+    });
+
+    return [
+      {
+        icon: Users,
+        value: uniqueUsers.size,
+        prefix: undefined as string | undefined,
+        suffix: '',
+        label: uniqueUsers.size === 1 ? 'Usuário Ativo' : 'Usuários Ativos',
+        color: 'from-blue-500 to-blue-600'
+      },
+      {
+        icon: Trophy,
+        value: pools.length,
+        prefix: undefined as string | undefined,
+        suffix: '',
+        label: pools.length === 1 ? 'Bolão Criado' : 'Bolões Criados',
+        color: 'from-green-500 to-green-600',
+        glow: true
+      },
+      {
+        icon: Target,
+        value: pools.reduce((acc, p) => acc + p.members.length, 0),
+        prefix: undefined as string | undefined,
+        suffix: '',
+        label: 'Participações',
+        color: 'from-orange-500 to-orange-600'
+      },
+      {
+        icon: Gift,
+        value: poolsWithPrize,
+        prefix: undefined as string | undefined,
+        suffix: '',
+        label: poolsWithPrize === 1 ? 'Bolão com Prêmio' : 'Bolões com Prêmio',
+        color: 'from-purple-500 to-purple-600'
+      }
+    ];
+  }, [pools]);
 
   return (
     <section ref={ref} className="py-24 bg-[#0D0F12] relative overflow-hidden">

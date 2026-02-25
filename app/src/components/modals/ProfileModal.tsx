@@ -12,20 +12,27 @@ import {
   LogOut,
   Edit2,
   Save,
-  Image
+  Image,
+  Shield,
+  Star,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
 import { usePoolsContext } from '@/context/PoolsContext';
 import { fileToAvatarDataUrl } from '@/lib/avatarUpload';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenAdmin?: () => void;
 }
 
-export const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
-  const { user, logout, updateUser } = useAuth();
+export const ProfileModal = ({ isOpen, onClose, onOpenAdmin }: ProfileModalProps) => {
+  const { user, logout, updateUser, isAdmin } = useAuth();
+  const { permission, isEnabling, isSupported, enableNotifications } = useNotifications();
   const { getGlobalLeaderboard, getUserPredictionHistory, getUserPoolsList } = usePoolsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
@@ -179,6 +186,41 @@ export const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
           </div>
         </div>
 
+        {/* Notificações Push */}
+        {isSupported && (
+          <div className="mb-6 p-4 rounded-xl border bg-gray-50 border-gray-200">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {permission === 'granted' ? (
+                  <Bell className="w-5 h-5 text-green-600" />
+                ) : (
+                  <BellOff className="w-5 h-5 text-gray-400" />
+                )}
+                <div>
+                  <div className="font-medium">Notificações</div>
+                  <div className="text-sm text-gray-500">
+                    {permission === 'granted'
+                      ? 'Ativadas — você recebe lembretes e atualizações'
+                      : permission === 'denied'
+                        ? 'Bloqueadas — ative nas configurações do navegador'
+                        : 'Receba lembretes de jogos e resultados'}
+                  </div>
+                </div>
+              </div>
+              {permission !== 'granted' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={enableNotifications}
+                  disabled={isEnabling}
+                >
+                  {isEnabling ? 'Ativando…' : 'Ativar'}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <Tabs defaultValue="history">
           <TabsList className="grid w-full grid-cols-2">
@@ -200,10 +242,10 @@ export const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                         <div className="font-medium">{item.homeTeam} {item.prediction.homeScore} x {item.prediction.awayScore} {item.awayTeam}</div>
                         <div className="text-sm text-gray-500">
                           Rodada {item.round} • {item.poolName}
-                          {item.points >= 5 ? ' • Acertou o placar!' : item.points >= 3 ? ' • Acertou o resultado' : ' • Errou'}
+                          {item.points >= 3 ? ' • Acertou o placar!' : item.points >= 1 ? ' • Acertou o resultado' : ' • Errou'}
                         </div>
                       </div>
-                      <div className={`font-bold ${item.points >= 3 ? 'text-green-600' : 'text-red-500'}`}>
+                      <div className={`font-bold ${item.points >= 3 ? 'text-green-600' : item.points >= 1 ? 'text-blue-600' : 'text-red-500'}`}>
                         {item.points > 0 ? `+${item.points}` : item.points} pts
                       </div>
                     </div>
@@ -214,7 +256,12 @@ export const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
           </TabsContent>
 
           <TabsContent value="achievements" className="mt-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className={`flex flex-col items-center p-4 rounded-xl border ${predictionHistory.length >= 1 ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-100 border-gray-200 opacity-50'}`}>
+                <Star className={`w-10 h-10 mb-2 ${predictionHistory.length >= 1 ? 'text-emerald-500' : 'text-gray-400'}`} />
+                <div className="text-sm font-medium text-center">Iniciante</div>
+                <div className="text-xs text-gray-500 text-center">{predictionHistory.length >= 1 ? 'Primeiro palpite!' : 'Faça seu primeiro palpite'}</div>
+              </div>
               <div className={`flex flex-col items-center p-4 rounded-xl border ${hasWonPool ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-100 border-gray-200 opacity-50'}`}>
                 <Trophy className={`w-10 h-10 mb-2 ${hasWonPool ? 'text-yellow-500' : 'text-gray-400'}`} />
                 <div className="text-sm font-medium text-center">Campeão</div>
@@ -234,8 +281,20 @@ export const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
           </TabsContent>
         </Tabs>
 
-        {/* Logout Button */}
-        <div className="mt-6">
+        {/* Admin e Logout */}
+        <div className="mt-6 space-y-3">
+          {isAdmin && onOpenAdmin && (
+            <Button
+              onClick={() => {
+                onClose();
+                onOpenAdmin();
+              }}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Painel Administrativo
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={logout}

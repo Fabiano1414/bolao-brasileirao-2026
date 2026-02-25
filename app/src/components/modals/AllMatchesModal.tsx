@@ -1,10 +1,18 @@
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MatchCard } from '@/components/ui/custom/MatchCard';
 import { useMatchesContext } from '@/context/MatchesContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePoolsContext } from '@/context/PoolsContext';
-import { Calendar, RefreshCw } from 'lucide-react';
+import { Calendar, RefreshCw, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface AllMatchesModalProps {
   isOpen: boolean;
@@ -25,13 +33,21 @@ export const AllMatchesModal = ({ isOpen, onClose }: AllMatchesModalProps) => {
   const { user } = useAuth();
   const { getUserPoolsList, savePrediction, getUserPrediction, getMatchResult, getPredictionPoints } = usePoolsContext();
 
+  const [selectedPoolId, setSelectedPoolId] = useState('');
   const now = Date.now();
   const matchesByRound = getUpcomingMatchesByRound(now);
   const sortedRounds = Array.from(matchesByRound.keys()).sort((a, b) => a - b);
   const currentRound = getCurrentRound(now);
   const userPools = user ? getUserPoolsList(user.id) : [];
   const hasPool = userPools.length > 0;
-  const effectivePoolId = hasPool ? userPools[0].id : '';
+  const effectivePoolId = selectedPoolId || (hasPool ? userPools[0].id : '');
+  const selectedPool = userPools.find(p => p.id === effectivePoolId);
+
+  useEffect(() => {
+    if (isOpen && userPools.length > 0 && !selectedPoolId) {
+      setSelectedPoolId(userPools[0].id);
+    }
+  }, [isOpen, userPools.length, selectedPoolId, userPools]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -51,6 +67,25 @@ export const AllMatchesModal = ({ isOpen, onClose }: AllMatchesModalProps) => {
             </Button>
           </div>
         </DialogHeader>
+
+        {user && hasPool && (
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-sm text-gray-600 font-medium">Palpites no bolão:</span>
+            <Select value={effectivePoolId} onValueChange={setSelectedPoolId}>
+              <SelectTrigger className="w-[260px]">
+                <Trophy className="w-4 h-4 mr-2 text-amber-500" />
+                <SelectValue placeholder="Escolha um bolão" />
+              </SelectTrigger>
+              <SelectContent>
+                {userPools.map((pool) => (
+                  <SelectItem key={pool.id} value={pool.id}>
+                    {pool.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="mt-4 space-y-8">
           {sortedRounds.length === 0 ? (
@@ -89,6 +124,7 @@ export const AllMatchesModal = ({ isOpen, onClose }: AllMatchesModalProps) => {
                           showPrediction={!!(user && hasPool)}
                           userPrediction={userPred}
                           pointsEarned={pointsEarned}
+                          showPrivacyHint={selectedPool?.predictionsPrivate !== false}
                           onPredict={
                             user && effectivePoolId
                               ? (matchId, homeScore, awayScore) => {

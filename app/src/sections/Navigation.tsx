@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trophy, Menu, X } from 'lucide-react';
+import { Trophy, Menu, X, Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 
@@ -10,6 +10,7 @@ interface NavigationProps {
   onViewMatches: () => void;
   onViewProfile: () => void;
   onViewMyPools: () => void;
+  onViewAdmin?: () => void;
 }
 
 export const Navigation = ({
@@ -17,18 +18,24 @@ export const Navigation = ({
   onViewPools,
   onViewMatches,
   onViewProfile,
-  onViewMyPools
+  onViewMyPools,
+  onViewAdmin,
 }: NavigationProps) => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 100);
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const navLinks: { label: string; onClick: () => void }[] = [
@@ -40,12 +47,15 @@ export const Navigation = ({
   if (user) {
     navLinks.splice(1, 0, { label: 'Meus Bolões', onClick: onViewMyPools });
   }
+  if (isAdmin && onViewAdmin) {
+    navLinks.push({ label: 'Admin', onClick: onViewAdmin });
+  }
 
   return (
     <>
       <nav
         className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-gray-200/50 transition-transform duration-300"
-        style={{ transform: isScrolled ? 'translateY(0)' : 'translateY(-100%)' }}
+        style={{ transform: isScrolled || isMobile ? 'translateY(0)' : 'translateY(-100%)' }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
           <div className="flex items-center justify-between h-16">
@@ -73,6 +83,16 @@ export const Navigation = ({
             <div className="hidden md:flex items-center gap-4">
               {user ? (
                 <>
+                  {isAdmin && onViewAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={onViewAdmin}
+                      className="border-violet-500 text-violet-600 hover:bg-violet-50"
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      Admin
+                    </Button>
+                  )}
                   <Button
                     onClick={onCreatePool}
                     className="bg-gradient-to-r from-blue-600 to-green-500 text-white font-semibold rounded-xl"
@@ -122,6 +142,18 @@ export const Navigation = ({
 
             {user ? (
               <>
+                {isAdmin && onViewAdmin && (
+                  <button
+                    onClick={() => {
+                      onViewAdmin();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-3 py-3 text-violet-600 font-medium"
+                  >
+                    <Shield className="w-5 h-5" />
+                    Admin
+                  </button>
+                )}
                 <Button
                   onClick={() => {
                     onCreatePool();

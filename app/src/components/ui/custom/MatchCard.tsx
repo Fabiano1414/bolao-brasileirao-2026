@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Match } from '@/types';
 import { TeamLogo } from './TeamLogo';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, ShieldCheck } from 'lucide-react';
 
 export interface UserPrediction {
   homeScore: number;
@@ -16,6 +16,8 @@ interface MatchCardProps {
   /** Pontos obtidos no jogo (quando já há resultado) */
   pointsEarned?: number;
   compact?: boolean;
+  /** Mostra aviso de que o palpite é individual e privado */
+  showPrivacyHint?: boolean;
 }
 
 const BET_CLOSE_MINUTES = 5;
@@ -28,7 +30,7 @@ function canPlaceBet(match: Match): boolean {
   return Date.now() < cutoff;
 }
 
-export const MatchCard = ({ match, showPrediction = false, onPredict, userPrediction, pointsEarned, compact = false }: MatchCardProps) => {
+export const MatchCard = ({ match, showPrediction = false, onPredict, userPrediction, pointsEarned, compact = false, showPrivacyHint = true }: MatchCardProps) => {
   const [homeScore, setHomeScore] = useState<number | ''>('');
   const [awayScore, setAwayScore] = useState<number | ''>('');
   const betsOpen = canPlaceBet(match);
@@ -59,7 +61,7 @@ export const MatchCard = ({ match, showPrediction = false, onPredict, userPredic
     const homeName = match.homeTeam.displayName ?? match.homeTeam.name;
     const awayName = match.awayTeam.displayName ?? match.awayTeam.name;
     return (
-      <div className="bg-white rounded-xl shadow-md p-3 min-w-[200px] border border-gray-100 hover:scale-[1.02] hover:shadow-xl transition-all duration-200">
+      <div className="bg-white rounded-xl shadow-md p-3 min-w-0 sm:min-w-[180px] border border-gray-100 hover:scale-[1.02] hover:shadow-xl transition-all duration-200">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <TeamLogo teamName={match.homeTeam.name} size="sm" />
@@ -132,12 +134,18 @@ export const MatchCard = ({ match, showPrediction = false, onPredict, userPredic
 
       {showPrediction && (
         <div className="mt-6 pt-4 border-t border-gray-100">
+          {showPrivacyHint && (
+            <div className="flex items-center gap-2 mb-3 text-xs text-gray-500">
+              <ShieldCheck className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+              <span>Seu palpite é individual e privado</span>
+            </div>
+          )}
           {userPrediction ? (
             <div className={`text-center py-4 px-3 rounded-xl border ${
               pointsEarned !== undefined
-                ? pointsEarned >= 5
+                ? pointsEarned >= 3
                   ? 'bg-green-50 border-green-200'
-                  : pointsEarned >= 3
+                  : pointsEarned >= 1
                     ? 'bg-blue-50 border-blue-200'
                     : 'bg-gray-50 border-gray-200'
                 : 'bg-green-50 border-green-200'
@@ -155,7 +163,7 @@ export const MatchCard = ({ match, showPrediction = false, onPredict, userPredic
                   Resultado: {match.homeScore} x {match.awayScore}
                   {pointsEarned !== undefined && (
                     <span className={`font-bold ml-1 ${
-                      pointsEarned >= 5 ? 'text-green-600' : pointsEarned >= 3 ? 'text-blue-600' : 'text-gray-600'
+                      pointsEarned >= 3 ? 'text-green-600' : pointsEarned >= 1 ? 'text-blue-600' : 'text-gray-600'
                     }`}>
                       • {pointsEarned} pts
                     </span>

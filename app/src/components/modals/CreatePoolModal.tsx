@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Trophy, Users, Lock, Gift, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { Trophy, Users, Lock, Gift, ArrowRight, ArrowLeft, Check, Shield } from 'lucide-react';
 import { usePoolsContext } from '@/context/PoolsContext';
 import { useAuth } from '@/hooks/useAuth';
 import type { Pool } from '@/types';
@@ -32,13 +32,14 @@ export const CreatePoolModal = ({ isOpen, onClose, onSuccess }: CreatePoolModalP
     name: '',
     description: '',
     isPrivate: true,
+    predictionsPrivate: true,
     prize: '',
   });
 
   /** Reseta o formulário ao abrir o modal para criar um novo bolão */
   useEffect(() => {
     if (isOpen) {
-      setFormData({ name: '', description: '', isPrivate: true, prize: '' });
+      setFormData({ name: '', description: '', isPrivate: true, predictionsPrivate: true, prize: '' });
       setCurrentStep(1);
     }
   }, [isOpen]);
@@ -60,6 +61,7 @@ export const CreatePoolModal = ({ isOpen, onClose, onSuccess }: CreatePoolModalP
         name: formData.name,
         description: formData.description,
         isPrivate: formData.isPrivate,
+        predictionsPrivate: formData.predictionsPrivate,
         prize: formData.prize,
         ownerId: user.id,
         owner: user,
@@ -181,6 +183,22 @@ export const CreatePoolModal = ({ isOpen, onClose, onSuccess }: CreatePoolModalP
                 </div>
                 <Switch defaultChecked />
               </div>
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Palpites Privados</div>
+                    <div className="text-sm text-gray-500">Cada um faz seu palpite individual. Ninguém vê o placar que o outro apostou.</div>
+                  </div>
+                </div>
+                <Switch
+                  checked={formData.predictionsPrivate}
+                  onCheckedChange={(checked) => setFormData({ ...formData, predictionsPrivate: checked })}
+                />
+              </div>
             </div>
           )}
 
@@ -208,6 +226,7 @@ export const CreatePoolModal = ({ isOpen, onClose, onSuccess }: CreatePoolModalP
                 <div className="space-y-1 text-sm">
                   <p><span className="font-medium">Nome:</span> {formData.name}</p>
                   <p><span className="font-medium">Privacidade:</span> {formData.isPrivate ? 'Privado' : 'Público'}</p>
+                  <p><span className="font-medium">Palpites:</span> {formData.predictionsPrivate ? 'Privados (cada um individual)' : 'Visíveis'}</p>
                   {formData.prize && <p><span className="font-medium">Prêmio:</span> {formData.prize}</p>}
                 </div>
               </div>
